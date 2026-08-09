@@ -30,7 +30,7 @@ const INNER_R = 1;     // full-resolution radius
 const INNER_RES = 32;  // quads per side, inner (2 m)
 const OUTER_RES = 16;  // quads per side, outer (4 m)
 const SKIRT = 3;       // skirt depth (m)
-const MAX_PROPS_PER_CHUNK = 24;
+const MAX_PROPS_PER_CHUNK = 32;
 
 export class ChunkManager {
   constructor(scene, generator) {
@@ -45,7 +45,9 @@ export class ChunkManager {
     this._pcz = null;
 
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this._innerPool = new MeshPool(scene, INNER_RES, 11, mat);
+    // Inner pool must cover the worst case: all 25 chunks on a mountain
+    // dome are promoted to full resolution.
+    this._innerPool = new MeshPool(scene, INNER_RES, 27, mat);
     this._outerPool = new MeshPool(scene, OUTER_RES, 18, mat);
     this._info = makeInfo();
     this._color = [0, 0, 0];
@@ -100,7 +102,13 @@ export class ChunkManager {
     for (let dx = -LOAD_R; dx <= LOAD_R; dx++) {
       for (let dz = -LOAD_R; dz <= LOAD_R; dz++) {
         const ccx = cx + dx, ccz = cz + dz;
-        const role = Math.max(Math.abs(dx), Math.abs(dz)) <= INNER_R ? 'inner' : 'outer';
+        // Mountain-dome chunks always build at full resolution: 4 m sampling
+        // on steep modulated slopes visibly diverges from the analytic
+        // surface the physics rides on.
+        const role =
+          Math.max(Math.abs(dx), Math.abs(dz)) <= INNER_R || this._onMountain(ccx, ccz)
+            ? 'inner'
+            : 'outer';
         const k = key(ccx, ccz);
         let c = this.chunks.get(k);
         if (!c) {
@@ -117,6 +125,14 @@ export class ChunkManager {
         }
       }
     }
+  }
+
+  /** True if a chunk overlaps a mountain destination's dome. */
+  _onMountain(ccx, ccz) {
+    const mn = this.gen.summitAt(ccx * CHUNK_SIZE + CHUNK_SIZE / 2, ccz * CHUNK_SIZE + CHUNK_SIZE / 2, 1e9);
+    if (!mn) return false;
+    const d = Math.hypot(ccx * CHUNK_SIZE + CHUNK_SIZE / 2 - mn.x, ccz * CHUNK_SIZE + CHUNK_SIZE / 2 - mn.z);
+    return d < mn.R + 46; // dome + a little of the surrounding approach
   }
 
   _release(c) {
@@ -249,7 +265,7 @@ export class ChunkManager {
       c.colliders.push({ x: summit.x - 6, z: summit.z + 4, r: 1.1 });
     }
 
-    for (let k2 = 0; k2 < 30 && c.props.length < MAX_PROPS_PER_CHUNK; k2++) {
+    for (let k2 = 0; k2 < 44 && c.props.length < MAX_PROPS_PER_CHUNK; k2++) {
       const x = ox + rng() * CHUNK_SIZE;
       const z = oz + rng() * CHUNK_SIZE;
       this.gen.sampleInfo(x, z, info);
@@ -265,7 +281,7 @@ export class ChunkManager {
       const wH = info.wH, wF = info.wF, wFa = info.wFa, wRk = info.wRk, wMnt = info.wMnt;
       if (info.mtn > 0.04) {
         const band = sstep(0.05, 0.15, info.mtn) * (1 - sstep(0.45, 0.6, info.mtn));
-        let acc = 0.85 * band + 0.06;
+        let acc = 1.0 * band + 0.08;
         if (pick < acc && ny > 0.8) { t = PROP.pine; s = 0.8 + rng() * 0.7; collR = 0.5 * s; }
         else if (pick < (acc += 0.5 * sstep(0.45, 0.65, info.mtn) + 0.05)) {
           t = PROP.rock; s = 0.5 + rng() * 1.1; sink = 0.25 * s;
@@ -273,15 +289,15 @@ export class ChunkManager {
         }
         else if (pick < (acc += 0.18 * band)) { t = PROP.bush; s = 0.7 + rng() * 0.8; }
       } else {
-      let acc = 0.68 * wF + 0.10 * wRk + 0.06 * wH + 0.05 * wMnt;
+      let acc = 0.78 * wF + 0.12 * wRk + 0.08 * wH + 0.06 * wMnt;
       if (pick < acc && ny > 0.82) { t = PROP.pine; s = 0.8 + rng() * 0.7; collR = 0.5 * s; }
-      else if (pick < (acc += 0.30 * wH + 0.12 * wFa) && ny > 0.82) { t = PROP.tree; s = 0.8 + rng() * 0.6; collR = 0.5 * s; }
-      else if (pick < (acc += 0.24 * wH + 0.22 * wF + 0.10 * wRk)) { t = PROP.bush; s = 0.7 + rng() * 0.8; }
-      else if (pick < (acc += 0.10 * wH + 0.12 * wF + 0.50 * wRk + 0.55 * wMnt)) {
+      else if (pick < (acc += 0.36 * wH + 0.15 * wFa) && ny > 0.82) { t = PROP.tree; s = 0.8 + rng() * 0.6; collR = 0.5 * s; }
+      else if (pick < (acc += 0.34 * wH + 0.30 * wF + 0.16 * wRk + 0.10 * wFa)) { t = PROP.bush; s = 0.7 + rng() * 0.8; }
+      else if (pick < (acc += 0.14 * wH + 0.16 * wF + 0.60 * wRk + 0.65 * wMnt)) {
         t = PROP.rock; s = 0.5 + rng() * 1.1; sink = 0.25 * s;
         if (s > 0.75) collR = 0.85 * s;
       }
-      else if (pick < (acc += 0.10 * wF)) { t = PROP.log; s = 0.8 + rng() * 0.5; }
+      else if (pick < (acc += 0.14 * wF)) { t = PROP.log; s = 0.8 + rng() * 0.5; }
       else if (pick < (acc += 0.22 * wFa) && ny > 0.9) { t = PROP.haystack; s = 0.8 + rng() * 0.5; }
       else if (pick < (acc += 0.05 * wFa + 0.012 * wH) && ny > 0.955) { t = PROP.house; collR = 2.4; sink = 0.2; }
       else if (pick < (acc += 0.16 * wFa) && ny > 0.9) { t = PROP.wall; s = 0.9 + rng() * 0.4; sink = 0.15; }
@@ -289,6 +305,11 @@ export class ChunkManager {
       else if (pick < (acc += 0.007 * (wMnt + wRk + wH)) && ny > 0.93) { t = PROP.stupa; collR = 1.1; sink = 0.15; }
       }
       if (t < 0) continue;
+
+      // Sink props deeper on slopes so their downhill edge never floats.
+      if (t === PROP.rock) sink += (1 - ny) * 1.3 * s;
+      else if (t === PROP.pine || t === PROP.tree) sink += (1 - ny) * 0.8 * s;
+      else if (t === PROP.bush || t === PROP.log) sink += (1 - ny) * 0.6 * s;
 
       const y = this.gen.height(x, z) - sink;
       const prop = { t, x, y, z, yaw: rng() * Math.PI * 2, s };

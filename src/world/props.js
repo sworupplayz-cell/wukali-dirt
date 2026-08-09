@@ -169,11 +169,11 @@ function rampDeck() {
 
 /** Prop type registry: name, geometry factory, pool capacity, double-sided? */
 export const PROP_TYPES = [
-  { name: 'pine', build: pine, max: 650 },
-  { name: 'tree', build: broadleaf, max: 320 },
-  { name: 'bush', build: bush, max: 400 },
-  { name: 'rock', build: rock, max: 450 },
-  { name: 'log', build: log, max: 120 },
+  { name: 'pine', build: pine, max: 800 },
+  { name: 'tree', build: broadleaf, max: 420 },
+  { name: 'bush', build: bush, max: 560 },
+  { name: 'rock', build: rock, max: 620 },
+  { name: 'log', build: log, max: 170 },
   { name: 'haystack', build: haystack, max: 90 },
   { name: 'house', build: house, max: 48 },
   { name: 'wall', build: wall, max: 140 },

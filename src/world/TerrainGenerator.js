@@ -350,7 +350,10 @@ export class TerrainGenerator {
     const n3 = vnoise(x * 0.034 - 5.2, z * 0.034 + 19.3, this.SH + 2) - 0.5;
     const n4 = vnoise(x * 0.07 + 27.9, z * 0.07 + 6.6, this.SH + 3) - 0.5;
     const amp = 7 * wH + 9 * wF + 4.4 * wFa + 13 * wRk + 17 * wMnt;
-    const rockDetail = (wRk + wMnt * 1.5 + 0.3) * (1 - 0.55 * mCore);
+    // Damp high-frequency detail under destination domes: the 2 m mesh
+    // cannot represent it, and the visual/collision gap it causes is far
+    // more noticeable on steep slopes than the detail itself.
+    const rockDetail = (wRk + wMnt * 1.5 + 0.3) * (1 - 0.75 * mCore);
     let hGentle = (n1 + 0.5 * n2) * amp;
     let h = hGentle + (0.25 * n3 * (rockDetail + 0.4) + 0.11 * n4 * rockDetail) * amp;
 
