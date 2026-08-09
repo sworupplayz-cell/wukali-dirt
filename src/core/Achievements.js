@@ -22,6 +22,25 @@ export class Achievements {
     }
     this._data.summits = this._data.summits || {};
     this._data.meta = this._data.meta || {};
+    this._data.trials = this._data.trials || {};
+  }
+
+  /**
+   * Register a time-trial completion (Phase 3K-1). Keeps the best time per
+   * mountain. Returns { first, improved, best } for the UI.
+   */
+  completeTrial(id, name, time) {
+    const prev = this._data.trials[id];
+    const first = prev === undefined;
+    const improved = first || time < prev.t;
+    if (improved) this._data.trials[id] = { t: time, name };
+    let meta = null;
+    if (!this._data.meta.trail_timer) {
+      this._data.meta.trail_timer = true;
+      meta = 'Trail Timer';
+    }
+    this._save();
+    return { first, improved, best: this._data.trials[id].t, meta };
   }
 
   get summitCount() {
@@ -55,6 +74,7 @@ export class Achievements {
     return {
       summits: { ...this._data.summits },
       meta: META.filter((a) => this._data.meta[a.id]).map((a) => a.title),
+      trials: { ...this._data.trials },
     };
   }
 

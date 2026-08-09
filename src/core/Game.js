@@ -9,6 +9,7 @@ import { RunStats } from './RunStats.js';
 import { StuntTracker } from './StuntTracker.js';
 import { Achievements } from './Achievements.js';
 import { Settings } from './Settings.js';
+import { TimeTrial } from './TimeTrial.js';
 
 export const State = {
   MENU: 'menu',
@@ -50,6 +51,7 @@ export class Game {
     this.run = new RunStats();
     this.stunts = new StuntTracker();
     this.achievements = new Achievements();
+    this.trials = new TimeTrial(this.scene, this.world, this.achievements);
     this.onSummit = null; // UI shows the summit banner
     this.newBest = false; // set when the run that just ended beat the best
     this._summitT = 0;
@@ -112,6 +114,7 @@ export class Game {
     this.run.endRun(); // quitting mid-run still records a best
     this.bike.fullReset();
     this.followCam.snapTo(this.bike);
+    this.trials.cancel();
     this._startRun();
     this._setState(State.PLAYING);
   }
@@ -119,6 +122,7 @@ export class Game {
   toMenu() {
     this.run.endRun();
     this.audio.setEngine(0, 0, false);
+    this.trials.cancel();
     this._setState(State.MENU);
   }
 
@@ -134,6 +138,7 @@ export class Game {
     this.bike.reset();
     this.followCam.snapTo(this.bike);
     this.stunts.cancel(); // teleport invalidates any in-flight stunt/combo
+    this.trials.cancel();
   }
 
   _startRun() {
@@ -196,6 +201,7 @@ export class Game {
         // A genuine crash ends the run (minor bumps never reach here).
         this._crashPending = false;
         this.newBest = this.run.endRun();
+        this.trials.cancel(); // a crashed run forfeits the trial
         this._setState(State.CRASHED);
       }
       // Summit detection: cheap check at 4 Hz, never per frame.
@@ -210,6 +216,9 @@ export class Game {
           }
         }
       }
+      // Time trials (Phase 3K-1): 2 Hz gate scan when idle, one distance
+      // check per frame while running.
+      if (this.state === State.PLAYING) this.trials.update(this.bike, frameDt);
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(
         Math.abs(this.bike.speed) / 26,

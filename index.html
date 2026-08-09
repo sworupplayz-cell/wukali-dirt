@@ -149,6 +149,12 @@
       white-space: nowrap; z-index: 15; }
     #combo-hud .ch { color: #ffe082; font-size: 1.2em; }
     #combo-hud .ct { color: #fff; }
+    /* Time trial HUD (Phase 3K-1): one small pill, top-center */
+    #trial-hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); color: #ffe082; font-weight: 800; font-size: clamp(12px, 2.8vmin, 16px);
+      letter-spacing: 0.5px; padding: 7px 14px; border-radius: 999px; pointer-events: none;
+      opacity: 0; transition: opacity 0.2s; white-space: nowrap; z-index: 15; }
+    #trial-hud.show { opacity: 1; }
     #combo-hud.show { opacity: 1; }
     #combo-hud.pop { transform: translate(-50%, 0) scale(1.12); }
     #combo-hud.show:not(.pop) { transform: translate(-50%, 0) scale(1); }
@@ -273,6 +279,7 @@
     <div id="score"></div>
     <div id="stunt-toast"></div>
     <div id="combo-hud"></div>
+    <div id="trial-hud"></div>
     <div id="summit-banner">
       <div class="sb-top">&#127956;&#65039; SUMMIT REACHED</div>
       <div class="sb-name" id="sb-name"></div>

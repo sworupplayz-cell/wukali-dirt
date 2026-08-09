@@ -21,6 +21,7 @@ export class UI {
     this.distance = $('distance');
     this.score = $('score');
     this.stuntToast = $('stunt-toast');
+    this.trialHud = $('trial-hud');
     this.summitBanner = $('summit-banner');
     this.toast = $('toast');
 
@@ -174,6 +175,37 @@ export class UI {
       this._summitTimer = setTimeout(() => this.summitBanner.classList.remove('show'), 3800);
     };
 
+    // ---- Time trials (Phase 3K-1) -------------------------------------------
+    const fmtT = (t) => {
+      const m = Math.floor(t / 60), s = t - m * 60;
+      return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+    };
+    this._trialPromptT = 0;
+    game.trials.onEvent = (type, p) => {
+      clearTimeout(this._trialHideT);
+      if (type === 'prompt') {
+        // Shown only while idle and near a gate (re-fired by the 2 Hz scan).
+        if (game.trials.state === 'idle') {
+          this.trialHud.textContent = `\u23F1 ${p.name} TIME TRIAL \u2014 ride through the gate`;
+          this.trialHud.classList.add('show');
+          this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 1600);
+        }
+      } else if (type === 'start') {
+        this.trialHud.classList.add('show');
+      } else if (type === 'checkpoint') {
+        this.trialHud.classList.add('show');
+      } else if (type === 'finish') {
+        const extra = p.meta ? ` \u00B7 \u{1F3C6} ${p.meta}` : (p.first ? '' : p.improved ? ' \u00B7 NEW BEST' : ` \u00B7 best ${fmtT(p.best)}`);
+        this.trialHud.textContent = `\u{1F3C1} ${p.name} \u2014 ${fmtT(p.time)}${extra}`;
+        this.trialHud.classList.add('show');
+        this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 5000);
+      } else if (type === 'abort') {
+        this.trialHud.textContent = `TRIAL OVER \u2014 ${p.reason}`;
+        this.trialHud.classList.add('show');
+        this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 2200);
+      }
+    };
+
     // HUD readouts: update at 5 Hz, not per frame (avoids DOM churn).
     setInterval(() => {
       if (game.state !== State.PLAYING && game.state !== State.CRASHED) return;
@@ -185,6 +217,14 @@ export class UI {
       this.speedo.innerHTML = `${Math.round(ms * 3.6)} <span>km/h</span>`;
       this.distance.textContent = fmtDist(game.run.distance);
       this.score.textContent = game.stunts.score > 0 ? `${game.stunts.score} PTS` : '';
+      // Running trial: live timer + checkpoint progress (same 5 Hz tick).
+      if (game.trials.state === 'running') {
+        const tr = game.trials;
+        const cp = Math.min(tr.cpIndex, tr.cpTotal());
+        this.trialHud.textContent = tr.cpIndex < tr.cpTotal()
+          ? `\u23F1 ${fmtT(tr.time)} \u00B7 CP ${cp}/${tr.cpTotal()}`
+          : `\u23F1 ${fmtT(tr.time)} \u00B7 TO THE SUMMIT!`;
+      }
     }, 200);
   }
 
@@ -198,6 +238,7 @@ export class UI {
     if (s === State.PLAYING || s === State.MENU) {
       this.stuntToast.classList.remove('show');
       this.comboHud.classList.remove('show');
+      this.trialHud.classList.remove('show');
     }
     if (s === State.MENU) this.summitBanner.classList.remove('show');
   }
