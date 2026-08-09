@@ -59,6 +59,7 @@ export class Game {
     };
     this.input.onPause = () => this.togglePause();
     this.input.onReset = () => this.resetBike();
+    this.input.onPov = () => this.togglePov();
 
     this._accumulator = 0;
     this._lastTime = 0;
@@ -116,6 +117,12 @@ export class Game {
     this.run.endRun();
     this.audio.setEngine(0, 0, false);
     this._setState(State.MENU);
+  }
+
+  /** Switch first/third person (HUD POV button or the C key). */
+  togglePov() {
+    if (this.state !== State.PLAYING && this.state !== State.PAUSED) return;
+    return this.followCam.toggle();
   }
 
   /** Recovery for a stuck (not crashed) bike; crash = run over. */

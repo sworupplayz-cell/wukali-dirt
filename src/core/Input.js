@@ -12,6 +12,7 @@ export class Input {
 
     this.onPause = null;
     this.onReset = null;
+    this.onPov = null;
 
     this._keys = new Set();
     this._touch = { gas: false, brake: false, left: false, right: false };
@@ -24,6 +25,7 @@ export class Input {
       this._keys.add(e.code);
       if ((e.code === 'Escape' || e.code === 'KeyP') && this.onPause) this.onPause();
       if (e.code === 'KeyR' && this.onReset) this.onReset();
+      if (e.code === 'KeyC' && this.onPov) this.onPov();
     });
     window.addEventListener('keyup', (e) => this._keys.delete(e.code));
     window.addEventListener('blur', () => this.clear());

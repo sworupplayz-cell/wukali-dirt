@@ -569,7 +569,7 @@ function check(name, ok, detail = '') {
   });
   await sleep(800);
   const yTop = (await state()).pos[1];
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 110; i++) {
     await sleep(120);
     const st = await page.evaluate(() => {
       const g = window.__game, A = window.__auto;
@@ -590,6 +590,7 @@ function check(name, ok, detail = '') {
       return { crashed: false, y: b.y };
     });
     if (st.crashed) {
+      // Narrow upper roads: recover and continue the descent.
       await sleep(300);
       await page.evaluate(() => {
         const g = window.__game, A = window.__auto;

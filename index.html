@@ -55,6 +55,9 @@
       width: clamp(46px, 9vmin, 60px); height: clamp(46px, 9vmin, 60px); font-size: 20px; border-radius: 12px; }
     #btn-reset { top: 10px; right: calc(max(12px, env(safe-area-inset-right)) + clamp(46px, 9vmin, 60px) + 10px);
       width: clamp(46px, 9vmin, 60px); height: clamp(46px, 9vmin, 60px); font-size: 22px; border-radius: 12px; }
+    #btn-pov { top: 10px; right: calc(max(12px, env(safe-area-inset-right)) + (clamp(46px, 9vmin, 60px) + 10px) * 2);
+      width: clamp(46px, 9vmin, 60px); height: clamp(46px, 9vmin, 60px);
+      font-size: clamp(11px, 2.2vmin, 14px); border-radius: 12px; font-weight: 800; }
 
     #speedo { position: fixed; top: 12px; left: max(14px, env(safe-area-inset-left)); color: #fff;
       font-size: clamp(18px, 4vmin, 26px); font-weight: 800; text-shadow: 0 2px 3px rgba(0,0,0,0.45);
@@ -171,6 +174,7 @@
     <div class="ctl" id="btn-gas"    data-control="gas">GAS</div>
     <div class="ctl" id="btn-pause">&#10074;&#10074;</div>
     <div class="ctl" id="btn-reset">&#8634;</div>
+    <div class="ctl" id="btn-pov">POV</div>
   </div>
 
   <div id="toast"></div>

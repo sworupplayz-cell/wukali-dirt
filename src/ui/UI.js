@@ -72,6 +72,7 @@ export class UI {
     // HUD
     $('btn-pause').addEventListener('click', () => game.togglePause());
     $('btn-reset').addEventListener('click', () => game.resetBike());
+    $('btn-pov').addEventListener('click', () => game.togglePov());
     document.querySelectorAll('[data-control]').forEach((el) => {
       game.input.bindButton(el, el.dataset.control);
     });
