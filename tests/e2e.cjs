@@ -396,6 +396,36 @@ function check(name, ok, detail = '') {
   await page.evaluate(() => window.__game.restart()); // DOM-independent recovery
   await sleep(400);
 
+  // ================= Phase 3D-1: destination registry =================
+  const reg = await page.evaluate(() => window.__game.world.getMountainRegistry()
+    .map((m) => ({ id: m.id, name: m.name, sig: m.signature, type: m.type,
+      diff: m.difficulty, x: Math.round(m.x), z: Math.round(m.z),
+      sy: +m.summit.y.toFixed(1), ach: m.achievementId })));
+  check('Registry has 15+ destinations', reg.length >= 15, `${reg.length}`);
+  const names = reg.map((m) => m.name);
+  check('All registry names unique', new Set(names).size === names.length, names.join(', '));
+  check('Shreya Shikhar exists exactly once', names.filter((n) => n === 'Shreya Shikhar').length === 1);
+  const sigs = reg.filter((m) => m.sig);
+  check('5-6 signature destinations', sigs.length >= 5 && sigs.length <= 6,
+    sigs.map((m) => m.name).join(', '));
+  check('Signature types are distinct', new Set(sigs.map((m) => m.type)).size === sigs.length);
+  let minSep = Infinity;
+  for (let i = 0; i < reg.length; i++) {
+    for (let j2 = i + 1; j2 < reg.length; j2++) {
+      minSep = Math.min(minSep, Math.hypot(reg[i].x - reg[j2].x, reg[i].z - reg[j2].z));
+    }
+  }
+  check('Destinations sufficiently separated', minSep > 600, `min ${Math.round(minSep)} m`);
+  check('Difficulties within 1..5', reg.every((m) => m.diff >= 1 && m.diff <= 5));
+  check('Every destination has an achievement id', reg.every((m) => m.ach && m.ach.length > 3));
+  const summitNameMatches = await page.evaluate(() => {
+    const w = window.__game.world;
+    const r = w.getMountainRegistry()[0];
+    const cell = w.summitAt(r.x, r.z, 20);
+    return cell && cell.name === r.name;
+  });
+  check('Cell records carry registry names (summit banner integration)', summitNameMatches);
+
   // ================= Phase 3B: mountain destinations =================
   const mlist = await page.evaluate(() => {
     const gen = window.__game.world.generator;
@@ -514,7 +544,7 @@ function check(name, ok, detail = '') {
       await page.screenshot({ path: SHOT('summit') });
       check('Summit reached by riding the road', true,
         `y ${startY.toFixed(0)} -> ${st.y.toFixed(0)}, ${climbCrashes} crashes on the way`);
-      check('Summit banner shown with mountain name', st.banner && st.name.startsWith('Mount '), st.name);
+      check('Summit banner shown with mountain name', st.banner && st.name.length > 3, st.name);
       break;
     }
   }
@@ -607,6 +637,10 @@ function check(name, ok, detail = '') {
   });
   check('Same seed => identical world', JSON.stringify(heights1) === JSON.stringify(heights2));
   check('Same seed => identical mountains', JSON.stringify(mlist) === JSON.stringify(mlist2));
+  const reg2 = await page.evaluate(() => window.__game.world.getMountainRegistry()
+    .map((m) => ({ id: m.id, name: m.name, sig: m.signature, x: Math.round(m.x), z: Math.round(m.z) })));
+  const regNow = reg.map((m) => ({ id: m.id, name: m.name, sig: m.sig, x: m.x, z: m.z }));
+  check('Same seed => identical registry', JSON.stringify(reg2) === JSON.stringify(regNow));
 
   await page.goto(URL + '/?seed=99', { waitUntil: 'networkidle0' });
   await sleep(1200);
@@ -624,6 +658,18 @@ function check(name, ok, detail = '') {
   check('Different seed => different world', alt.h !== heights1[0]);
   check('Different seed => different mountains', JSON.stringify(alt.mlist) !== JSON.stringify(mlist),
     `${alt.mlist.length} mountains for seed 99`);
+  const reg99 = await page.evaluate(() => window.__game.world.getMountainRegistry()
+    .map((m) => [Math.round(m.x), Math.round(m.z)]));
+  check('Different seed => different registry positions',
+    JSON.stringify(reg99) !== JSON.stringify(reg.map((m) => [m.x, m.z])),
+    `seed99 first: ${JSON.stringify(reg99[0])}`);
+  const reg99names = await page.evaluate(() => {
+    const names2 = window.__game.world.getMountainRegistry().map((m) => m.name);
+    return { unique: new Set(names2).size === names2.length,
+      shreya: names2.filter((n) => n === 'Shreya Shikhar').length };
+  });
+  check('Seed 99 registry also valid (unique names, one Shreya Shikhar)',
+    reg99names.unique && reg99names.shreya === 1, JSON.stringify(reg99names));
 
   // ================= Pause / menu / touch regression =================
   await page.goto(URL, { waitUntil: 'networkidle0' });

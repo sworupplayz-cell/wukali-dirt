@@ -1,4 +1,4 @@
-import { vnoise, fbm2, hash01, hashInt, sstep } from './noise.js';
+import { vnoise, fbm2, hash01, hashInt, mulberry32, sstep } from './noise.js';
 
 /**
  * TerrainGenerator — the analytic heart of the endless world.
@@ -35,12 +35,24 @@ import { vnoise, fbm2, hash01, hashInt, sstep } from './noise.js';
 const CELL = 80; // feature-cell size (m)
 const MCELL = 1200;           // mountain-destination cell size (m)
 const ROAD_END_R = 16;        // spiral road ends this close to the summit
+const REGISTRY_SIZE = 16;     // named destinations curated around the origin
+const SIGNATURE_COUNT = 6;
 const MOUNTAIN_NAMES = [
   'Suryodaya', 'Ratnagiri', 'Megharaj', 'Seto Shikhar',
   'Bhalu Danda', 'Kalika Danda', 'Juneli Chuli', 'Indra Shikhar',
   'Phul Danda', 'Tara Chuli', 'Hariyo Danda', 'Chirbire Shikhar',
   'Sunkhani Peak', 'Dhunge Chuli', 'Bataas Danda', 'Kuhiro Shikhar',
 ];
+// Signature destinations: distinct names + one fixed hero peak.
+const SIGNATURE_NAMES = [
+  'Shreya Shikhar', 'Aakash Chuli', 'Rajkanya Himal',
+  'Basanta Shikhar', 'Ganga Devi Peak', 'Mukti Himal',
+];
+const SIGNATURE_TYPES = [
+  'snow crown', 'twin ridge', 'cliff head',
+  'sacred dome', 'terraced peak', 'storm spur',
+];
+const NORMAL_TYPES = ['green dome', 'pine ridge', 'rocky spur', 'grass crest'];
 
 export class TerrainGenerator {
   constructor(seed = 20) {
@@ -62,6 +74,8 @@ export class TerrainGenerator {
     this._cells = new Map();
     this._mcells = new Map();
     this._mtnD = 0; // distance to the mountain returned by _mountainNear
+    this._registryMeta = null; // cell key -> destination metadata (never pruned)
+    this._registryList = null;
     this._info = makeInfo(); // scratch for height-only sampling
   }
 
@@ -221,9 +235,98 @@ export class TerrainGenerator {
           modC: 0.85 + 0.34 * hash01(cx, cz, this.SMt + 9),
         };
       }
+      if (mn && this._registryMeta) {
+        const meta = this._registryMeta.get(key);
+        if (meta) Object.assign(mn, meta);
+      }
       this._mcells.set(key, mn);
     }
     return mn;
+  }
+
+  /**
+   * Destination registry: the REGISTRY_SIZE mountains nearest the origin
+   * (deterministic spiral cell order), decorated with unique curated names,
+   * signature status, type and difficulty. Pure metadata — geometry only
+   * ever materializes through the normal chunk/impostor systems.
+   */
+  getRegistry() {
+    if (this._registryList) return this._registryList;
+
+    // Collect candidate cells in a deterministic spiral around (0,0).
+    const cells = [];
+    for (let r = 0; r <= 8 && cells.length < REGISTRY_SIZE; r++) {
+      const ring = [];
+      for (let cx = -r; cx <= r; cx++) {
+        for (let cz = -r; cz <= r; cz++) {
+          if (Math.max(Math.abs(cx), Math.abs(cz)) !== r) continue;
+          ring.push([cx, cz]);
+        }
+      }
+      // Fixed order within the ring (already deterministic by construction).
+      for (const [cx, cz] of ring) {
+        if (cells.length >= REGISTRY_SIZE) break;
+        const key = (cx + 8192) * 16384 + (cz + 8192);
+        // Query the raw cell without registry decoration (not built yet).
+        const mn = this.mountainCell(cx, cz);
+        if (mn) cells.push({ key, cx, cz });
+      }
+    }
+
+    // Seeded assignment: which registry slots are signature, which names.
+    const rng = mulberry32((this.seed | 0) * 2654435761 + 13);
+    const slotOrder = cells.map((_, i) => i);
+    for (let i = slotOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [slotOrder[i], slotOrder[j]] = [slotOrder[j], slotOrder[i]];
+    }
+    const signatureSlots = new Set(slotOrder.slice(0, SIGNATURE_COUNT));
+    const normalNames = [...MOUNTAIN_NAMES];
+    for (let i = normalNames.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [normalNames[i], normalNames[j]] = [normalNames[j], normalNames[i]];
+    }
+
+    this._registryMeta = new Map();
+    let sigIdx = 0, normIdx = 0;
+    const list = [];
+    cells.forEach((c, i) => {
+      const signature = signatureSlots.has(i);
+      const meta = signature
+        ? {
+            name: SIGNATURE_NAMES[sigIdx],
+            type: SIGNATURE_TYPES[sigIdx],
+            signature: true,
+          }
+        : {
+            name: normalNames[normIdx++],
+            type: NORMAL_TYPES[hashInt(c.cx, c.cz, this.SMt + 11) >>> 4 & 3],
+            signature: false,
+          };
+      if (signature) sigIdx++;
+      meta.registryIndex = i;
+      this._registryMeta.set(c.key, meta);
+
+      // Decorate the (cached) record and derive the public entry.
+      const mn = this._mcells.get(c.key);
+      Object.assign(mn, meta);
+      const summitY = this.height(mn.x, mn.z);
+      list.push({
+        id: mn.id,
+        achievementId: mn.id, // achievements already key on this
+        name: mn.name,
+        type: mn.type,
+        signature: mn.signature,
+        difficulty: Math.max(1, Math.min(5, Math.round(1 + (mn.H - 55) / 8))),
+        x: mn.x,
+        z: mn.z,
+        R: mn.R,
+        H: mn.H,
+        summit: { x: mn.x, y: summitY, z: mn.z },
+      });
+    });
+    this._registryList = list;
+    return list;
   }
 
   /** Mountain whose influence covers (x,z), or null; distance in _mtnD. */

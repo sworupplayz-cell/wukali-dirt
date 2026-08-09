@@ -81,7 +81,9 @@ export class UI {
 
     // Summit banner (one reused node; event-driven).
     game.onSummit = (res) => {
-      $('sb-name').textContent = `Mount ${res.name}`;
+      // Names carrying a Nepali mountain word need no "Mount" prefix.
+      const hasSuffix = /(Shikhar|Chuli|Danda|Himal|Peak|Crown)$/.test(res.name);
+      $('sb-name').textContent = hasSuffix ? res.name : `Mount ${res.name}`;
       $('sb-ach').textContent = res.meta.length
         ? `\u{1F3C6} ${res.meta.join(' \u00B7 ')}`
         : `\u{1F3C6} Mountain Conquered (${game.achievements.summitCount})`;

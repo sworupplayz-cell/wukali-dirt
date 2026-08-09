@@ -16,6 +16,7 @@ export class WorldManager {
   constructor(scene, seed = 20) {
     this.seed = seed;
     this.generator = new TerrainGenerator(seed);
+    this.generator.getRegistry(); // eager: curated names apply from frame one
     this._buildLighting(scene);
     this.chunks = new ChunkManager(scene, this.generator);
     this.mountains = new Mountains(scene, seed);
@@ -92,6 +93,25 @@ export class WorldManager {
   /** Nearest mountain destination (tests/debug/future UI). */
   nearestMountain(x, z) {
     return this.generator.nearestMountain(x, z);
+  }
+
+  /** Curated destination registry (16 named mountains around the origin). */
+  getMountainRegistry() {
+    return this.generator.getRegistry();
+  }
+
+  /** All mountain destinations within maxDist of a point (metadata only). */
+  mountainsNear(x, z, maxDist = 2500) {
+    const out = [];
+    const cellR = Math.ceil(maxDist / 1200);
+    const mcx = Math.floor(x / 1200), mcz = Math.floor(z / 1200);
+    for (let dx = -cellR; dx <= cellR; dx++) {
+      for (let dz = -cellR; dz <= cellR; dz++) {
+        const m = this.generator.mountainCell(mcx + dx, mcz + dz);
+        if (m && Math.hypot(m.x - x, m.z - z) <= maxDist) out.push(m);
+      }
+    }
+    return out;
   }
 
   /** Point + uphill heading on a mountain road (tests/debug). */
