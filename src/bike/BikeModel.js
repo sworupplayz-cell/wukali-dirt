@@ -111,6 +111,8 @@ export class BikeModel {
 
     // Blob shadow (cheap replacement for shadow maps).
     this.shadow = this._makeBlobShadow();
+    this._offF = 0; // per-wheel terrain-contact travel (see sync)
+    this._offR = 0;
 
     scene.add(g);
     scene.add(this.shadow);
@@ -156,7 +158,7 @@ export class BikeModel {
   }
 
   /** Copy physics state onto the visual hierarchy. */
-  sync(bike, groundY, groundNormal) {
+  sync(bike, groundY, groundNormal, world, dt = 1 / 60) {
     this.group.position.copy(bike.position);
     this.group.quaternion.copy(bike.quaternion);
     this.chassis.position.y = bike.suspension;
@@ -164,6 +166,55 @@ export class BikeModel {
     this.steerGroup.rotation.y = -bike.steer * 0.42;
     this.frontWheel.rotation.x = bike.wheelSpin;
     this.rearWheel.rotation.x = bike.wheelSpin + (bike.slipSpin || 0);
+
+    // ---- Per-wheel terrain contact ----------------------------------------
+    // The physics seats the bike's ORIGIN on the terrain with the local
+    // normal, but each wheel sits ~0.65 m away where the ground can be
+    // higher (tyre buried) or lower (tyre floating). Each wheel therefore
+    // samples the terrain under its own column and slides along its real
+    // travel axis — the rake/fork axis in front, the chassis vertical in
+    // the rear — like true suspension travel. The chassis bob is
+    // compensated so the sprung mass bounces while the tyres stay seated.
+    if (world) {
+      const q = bike.quaternion;
+      const suspF = bike.suspension / FORK_AXIS_Y; // bob along the fork axis
+      // Neutral (offset-free, bob-compensated) wheel poses first, so world
+      // positions below are the reference contact columns.
+      this.rearWheel.position.y = REAR_Y - bike.suspension + this._offR;
+      this.frontWheel.position.y = FRONT_Y - suspF + this._offF;
+
+      // Effective tyre radius shrinks a little as the bike leans (the
+      // lowest rim point of a tilted disc).
+      _axle.set(1, 0, 0).applyQuaternion(q);
+      const rEff = WHEEL_R * Math.max(0.85, Math.sqrt(1 - _axle.y * _axle.y));
+
+      const k = 1 - Math.exp(-28 * dt); // smooth wheel travel (no popping)
+
+      // Rear: travel axis = chassis up.
+      _up.set(0, 1, 0).applyQuaternion(q);
+      this.rearWheel.getWorldPosition(_wp);
+      let target = 0;
+      if (bike.grounded) {
+        const gy = world.getHeight(_wp.x, _wp.z);
+        const dyWorld = gy + rEff - (_wp.y - this._offR * _up.y);
+        target = THREE.MathUtils.clamp(dyWorld / Math.max(0.45, _up.y), -0.26, 0.30);
+      }
+      this._offR += (target - this._offR) * k;
+      this.rearWheel.position.y = REAR_Y - bike.suspension + this._offR;
+
+      // Front: travel axis = fork/rake axis (steering spins around it, so
+      // a shift along it is steering-invariant).
+      _fork.set(0, FORK_AXIS_Y, FORK_AXIS_Z).applyQuaternion(q);
+      this.frontWheel.getWorldPosition(_wp);
+      target = 0;
+      if (bike.grounded) {
+        const gy = world.getHeight(_wp.x, _wp.z);
+        const dyWorld = gy + rEff - (_wp.y - this._offF * _fork.y);
+        target = THREE.MathUtils.clamp(dyWorld / Math.max(0.45, _fork.y), -0.28, 0.32);
+      }
+      this._offF += (target - this._offF) * k;
+      this.frontWheel.position.y = FRONT_Y - suspF + this._offF;
+    }
 
     // Blob shadow hugs the terrain (aligned to its normal) and fades with height.
     this.shadow.position.set(
@@ -180,6 +231,16 @@ export class BikeModel {
 }
 
 const _planeUp = new THREE.Vector3(0, 0, 1); // PlaneGeometry faces +Z
+// Wheel-contact geometry (matches the constructor's local poses above).
+const WHEEL_R = 0.34;
+const REAR_Y = 0.34;        // rear wheel base local y (chassis space)
+const FRONT_Y = -0.63;      // front wheel base local y (steer space)
+const FORK_AXIS_Y = Math.cos(0.42);  // rake axis in chassis space
+const FORK_AXIS_Z = -Math.sin(0.42);
+const _up = new THREE.Vector3();
+const _fork = new THREE.Vector3();
+const _axle = new THREE.Vector3();
+const _wp = new THREE.Vector3();
 
 /**
  * Low-poly rider in a fictional Nepali-inspired outfit: cream daura shirt

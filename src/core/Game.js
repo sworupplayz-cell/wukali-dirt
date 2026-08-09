@@ -148,7 +148,7 @@ export class Game {
     this.camera.updateProjectionMatrix();
   }
 
-  _syncModel() {
+  _syncModel(dt = 1 / 60) {
     // Rider rides in third person; hidden once the POV blend passes helmet
     // distance so the camera never clips through him.
     this.bikeModel.setRiderVisible(this.followCam.blend < 0.45);
@@ -156,7 +156,9 @@ export class Game {
     this.bikeModel.sync(
       this.bike,
       this.world.getHeight(p.x, p.z),
-      this.world.getNormal(p.x, p.z, this._groundNormal)
+      this.world.getNormal(p.x, p.z, this._groundNormal),
+      this.world,
+      dt
     );
   }
 
@@ -218,7 +220,7 @@ export class Game {
       this.audio.setEngine(0, 0, false);
     }
 
-    this._syncModel();
+    this._syncModel(frameDt);
     this.renderer.render(this.scene, this.camera);
 
     this.stats.frames++;
