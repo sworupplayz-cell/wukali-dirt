@@ -248,13 +248,15 @@ function check(name, ok, detail = '') {
     await page.evaluate(() => {
       const g = window.__game;
       g.input.update = () => { g.input.throttle = 1; g.input.brake = 0; g.input.steer = 0; };
-      window.__jump = { scored: 0, combo: 0, crashed: false, air: false, toast: '' };
+      window.__jump = { scored: 0, combo: 0, crashed: false, air: false, toast: '', base: 0 };
       const iv = setInterval(() => {
         const J = window.__jump;
-        if (!g.bike.grounded) J.air = true;
+        if (!g.bike.grounded && !J.air) { J.air = true; J.base = g.stunts.score; }
         if (g.bike.crashed) J.crashed = true;
-        if (g.stunts.score > 0 && !J.scored) {
-          J.scored = g.stunts.score;
+        // Phase 3I-1: the full-throttle approach may already bank a wheelie,
+        // so only score gained after takeoff counts as the jump's payout.
+        if (J.air && g.stunts.score > J.base && !J.scored) {
+          J.scored = g.stunts.score - J.base;
           J.combo = g.stunts.combo;
           J.toast = document.getElementById('stunt-toast').textContent;
         }
@@ -273,7 +275,7 @@ function check(name, ok, detail = '') {
     }
     check('Ramp jump: launch + clean landing awards points',
       jump.air && jump.scored > 0 && !jump.crashed, JSON.stringify(jump));
-    check('Stunt notification shown', /AIR \+\d+/.test(jump.toast), jump.toast);
+    check('Stunt notification shown', /(AIR|COMBO x\d+) \+\d+/.test(jump.toast), jump.toast);
     check('Combo increments after stunt', jump.combo >= 2, `combo=${jump.combo}`);
   }
   await page.keyboard.up('KeyW');

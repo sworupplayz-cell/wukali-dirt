@@ -59,14 +59,29 @@ export class UI {
 
     // Stunt notifications (event-driven; one reused DOM node).
     game.stunts.onStunt = (label, pts, combo) => {
-      const failed = label === 'CRASHED';
-      this.stuntToast.textContent = failed
-        ? `CRASHED +${pts}`
-        : `${label} +${pts}${combo > 1 ? '  x' + combo : ''}`;
+      const failed = label === 'COMBO LOST';
+      this.stuntToast.textContent = failed ? label : `${label} +${pts}`;
       this.stuntToast.classList.toggle('bad', failed);
       this.stuntToast.classList.add('show');
       clearTimeout(this._stuntTimer);
       this._stuntTimer = setTimeout(() => this.stuntToast.classList.remove('show'), 1500);
+    };
+
+    // Live combo HUD (Phase 3I-1): small, top-center, transform/opacity only.
+    this.comboHud = $('combo-hud');
+    game.stunts.onCombo = (count, pending, mult) => {
+      if (count > 0 && pending > 0) {
+        this.comboHud.textContent = count > 1 ? `COMBO x${mult}  +${pending}` : `+${pending}`;
+        this.comboHud.classList.add('show');
+        // Cheap pop: retrigger the scale transition on every trick.
+        this.comboHud.classList.remove('pop');
+        void this.comboHud.offsetWidth;
+        this.comboHud.classList.add('pop');
+        clearTimeout(this._comboPopT);
+        this._comboPopT = setTimeout(() => this.comboHud.classList.remove('pop'), 140);
+      } else {
+        this.comboHud.classList.remove('show');
+      }
     };
 
     // HUD
@@ -116,6 +131,7 @@ export class UI {
     if (s === State.CRASHED) this._fillGameOver();
     if (s === State.PLAYING || s === State.MENU) {
       this.stuntToast.classList.remove('show');
+      this.comboHud.classList.remove('show');
     }
     if (s === State.MENU) this.summitBanner.classList.remove('show');
   }

@@ -1,22 +1,40 @@
 /**
- * StuntTracker — detects meaningful jumps purely by observing the bike's
- * existing physics state (grounded / crashed / heightAboveGround / yaw).
- * No changes to bike physics, no allocations per step.
+ * StuntTracker (Phase 3I-1) — readable tricks chained into combos, detected
+ * purely by observing the bike's physics state. No allocations per step.
  *
- * A stunt = airborne phase with enough air time or height. Landing clean
- * awards base points x combo; crashing the landing awards only 25% and
- * resets the combo. The combo also decays after 8 s without a stunt.
+ * TRICKS (each must actually be performed — thresholds + hysteresis stop
+ * tiny bounces from scoring):
+ *   WHEELIE      +50   groundPitch > 0.32 sustained 0.7 s (re-arms < 0.12)
+ *   ENDO         +50   groundPitch < -0.16 sustained 0.5 s (re-arms > -0.06)
+ *   AIR          +25   airborne >= 0.45 s or peak >= 1.1 m   (on landing)
+ *   BIG AIR      +60   airborne >= 1.2 s or peak >= 3 m
+ *   HUGE AIR     +100  airborne >= 1.9 s or peak >= 5 m
+ *   AIR ROTATION +100  >= 1.0 rad of yaw spin in one flight (once/flight)
+ *   BACKFLIP     +150  full nose-up rotation in the air (each full turn)
+ *   FRONTFLIP    +150  full nose-down rotation in the air
+ *
+ * COMBO: the Nth trick of a chain pays base x min(N, 5); points accumulate
+ * UNBANKED. A clean landing banks them ("CLEAN LANDING"); riding normally
+ * for ~1.6 s banks whatever is pending and ends the chain; crashing or a
+ * bad landing loses everything unbanked ("COMBO LOST").
  */
-const MIN_AIR_TIME = 0.45; // s
-const MIN_AIR_HEIGHT = 1.1; // m
-const COMBO_WINDOW = 8;    // s
-const MAX_COMBO = 5;
+const CHAIN_WINDOW = 1.6; // s of normal riding before the chain ends
+const MAX_MULT = 5;
+
+const FLIP_ANGLE = 2 * Math.PI - 0.7; // forgiving full rotation
+const TWO_PI = 2 * Math.PI;
 
 export class StuntTracker {
   constructor() {
-    this.score = 0;
-    this.combo = 1;
-    this.onStunt = null; // (label, points, combo) — UI shows the toast
+    this.score = 0;   // banked points (HUD / game over / tests)
+    this.combo = 1;   // multiplier the NEXT trick would get (1..5)
+    this.onStunt = null; // (label, pts, comboCount) — bank / loss toast
+    this.onCombo = null; // (count, pending, mult) — live combo HUD
+
+    this._count = 0;     // tricks in the current chain
+    this._pending = 0;   // unbanked points
+    this._chainT = 0;    // grounded time left before the chain ends
+    this._lastLabel = '';
 
     this._air = false;
     this._t = 0;
@@ -25,28 +43,88 @@ export class StuntTracker {
     this._sz = 0;
     this._rot = 0;
     this._prevYaw = 0;
-    this._comboT = 0;
+    this._rotDone = false;
+    this._flips = 0;
+
+    this._wheelieT = 0;
+    this._wheelieArmed = true;
+    this._endoT = 0;
+    this._endoArmed = true;
   }
 
   /** New run. */
   reset() {
     this.score = 0;
-    this.combo = 1;
+    this._clearChain();
     this._air = false;
-    this._comboT = 0;
+    this._wheelieT = 0; this._wheelieArmed = true;
+    this._endoT = 0; this._endoArmed = true;
   }
 
   /** Abort any in-flight tracking (manual bike reset / teleport). */
   cancel() {
+    this._clearChain();
     this._air = false;
+  }
+
+  _clearChain() {
+    this._count = 0;
+    this._pending = 0;
+    this._chainT = 0;
     this.combo = 1;
-    this._comboT = 0;
+    if (this.onCombo) this.onCombo(0, 0, 1);
+  }
+
+  /** Trick performed: pay it into the chain at the current multiplier. */
+  _award(label, base) {
+    const mult = Math.min(this._count + 1, MAX_MULT);
+    this._count++;
+    this._pending += base * mult;
+    this._lastLabel = label;
+    this._chainT = CHAIN_WINDOW;
+    this.combo = Math.min(this._count + 1, MAX_MULT);
+    if (this.onCombo) this.onCombo(this._count, this._pending, Math.min(this._count, MAX_MULT));
+  }
+
+  /** Bank the pending points (clean landing or quiet chain timeout). */
+  _bank(atLanding) {
+    if (this._pending > 0) {
+      this.score += this._pending;
+      const label = this._count > 1
+        ? `${atLanding ? 'CLEAN LANDING \u00b7 ' : ''}COMBO x${Math.min(this._count, MAX_MULT)}`
+        : this._lastLabel;
+      if (this.onStunt) this.onStunt(label, this._pending, this._count);
+    }
+    this._pending = 0;
+    if (this.onCombo) this.onCombo(this._count, 0, Math.min(Math.max(this._count, 1), MAX_MULT));
+    // The multiplier ladder survives for one more CHAIN_WINDOW so quick
+    // back-to-back jumps keep climbing; _chainT expiry ends the chain.
+  }
+
+  /** Crash / bad landing: the unbanked combo is lost. */
+  _lose() {
+    const lostPoints = this._pending > 0; // banked points are safe — only toast a real loss
+    this._count = 0;
+    this._pending = 0;
+    this._chainT = 0;
+    this.combo = 1;
+    if (lostPoints && this.onStunt) this.onStunt('COMBO LOST', 0, 0);
+    if (this.onCombo) this.onCombo(0, 0, 1);
   }
 
   /** Per fixed step, after bike.update(). */
   step(bike, dt) {
+    if (bike.crashed) {
+      if (this._air) this._air = false;
+      this._lose();
+      this._wheelieT = 0;
+      this._endoT = 0;
+      return;
+    }
+
     if (!this._air) {
-      if (!bike.grounded && !bike.crashed) {
+      if (!bike.grounded) {
+        // Takeoff.
         this._air = true;
         this._t = 0;
         this._peak = 0;
@@ -54,13 +132,15 @@ export class StuntTracker {
         this._sz = bike.position.z;
         this._rot = 0;
         this._prevYaw = bike.yaw;
-      } else if (this._comboT > 0) {
-        this._comboT -= dt;
-        if (this._comboT <= 0) this.combo = 1;
+        this._rotDone = false;
+        this._flips = 0;
+        return;
       }
+      this._groundStep(bike, dt);
       return;
     }
 
+    // ---- Airborne ----------------------------------------------------------
     this._t += dt;
     if (bike.heightAboveGround > this._peak) this._peak = bike.heightAboveGround;
     let dy = bike.yaw - this._prevYaw;
@@ -68,38 +148,70 @@ export class StuntTracker {
     this._rot += dy;
     this._prevYaw = bike.yaw;
 
+    // Mid-air awards (responsive: the combo HUD ticks while flying).
+    if (!this._rotDone && Math.abs(this._rot) >= 1.0) {
+      this._rotDone = true;
+      this._award('AIR ROTATION', 100);
+    }
+    const travel = bike.airPitchTravel;
+    const flipsNow = Math.floor((Math.abs(travel) + (TWO_PI - FLIP_ANGLE)) / TWO_PI);
+    while (this._flips < flipsNow) {
+      this._flips++;
+      this._award(travel > 0 ? 'BACKFLIP' : 'FRONTFLIP', 150);
+    }
+
     if (bike.grounded) this._land(bike);
   }
 
   _land(bike) {
     this._air = false;
     const dist = Math.hypot(bike.position.x - this._sx, bike.position.z - this._sz);
-    if (dist > 60) return; // teleport mid-"flight": not a stunt
+    if (dist > 60) { this.cancel(); return; } // teleport mid-"flight": not a stunt
 
-    if (this._t < MIN_AIR_TIME && this._peak < MIN_AIR_HEIGHT) return; // small hop
+    // Air-time trick (evaluated at landing so the tier is known).
+    if (this._t >= 1.9 || this._peak >= 5) this._award('HUGE AIR', 100);
+    else if (this._t >= 1.2 || this._peak >= 3) this._award('BIG AIR', 60);
+    else if (this._t >= 0.45 || this._peak >= 1.1) this._award('AIR', 25);
 
-    const base = 10 * Math.round((this._t * 90 + this._peak * 45 + dist * 4) / 10);
-    const whip = Math.abs(this._rot) > 0.7;
+    // bike.crashed landings never reach here (handled at the top of step);
+    // this is a clean landing — bank everything.
+    this._bank(true);
+  }
 
-    if (bike.crashed) {
-      // Crashed the landing: quarter points, combo gone, no celebration.
-      const pts = 10 * Math.round(base * 0.25 / 10);
-      this.score += pts;
-      this.combo = 1;
-      this._comboT = 0;
-      if (this.onStunt && pts > 0) this.onStunt('CRASHED', pts, 0);
-      return;
+  _groundStep(bike, dt) {
+    // Wheelie: sustained nose-up beyond a real angle, once per lift.
+    if (bike.groundPitch > 0.32) {
+      this._wheelieT += dt;
+      if (this._wheelieArmed && this._wheelieT >= 0.7) {
+        this._wheelieArmed = false;
+        this._award('WHEELIE', 50);
+      }
+    } else if (bike.groundPitch < 0.12) {
+      this._wheelieT = 0;
+      this._wheelieArmed = true;
+    }
+    // Endo: sustained nose-down under braking (stoppies are short by nature).
+    if (bike.groundPitch < -0.12) {
+      this._endoT += dt;
+      if (this._endoArmed && this._endoT >= 0.3) {
+        this._endoArmed = false;
+        this._award('ENDO', 50);
+      }
+    } else if (bike.groundPitch > -0.06) {
+      this._endoT = 0;
+      this._endoArmed = true;
     }
 
-    let label = 'AIR';
-    if (this._t >= 1.9 || this._peak >= 5) label = 'HUGE AIR';
-    else if (this._t >= 1.2 || this._peak >= 3) label = 'BIG AIR';
-    if (whip) label = 'WHIP ' + label;
-
-    const pts = (base + (whip ? 100 : 0)) * this.combo;
-    this.score += pts;
-    if (this.onStunt) this.onStunt(label, pts, this.combo);
-    this.combo = Math.min(this.combo + 1, MAX_COMBO);
-    this._comboT = COMBO_WINDOW;
+    // Chain countdown while riding normally (frozen during an active
+    // wheelie/endo so a long wheelie can flow into a jump).
+    if (this._chainT > 0 && Math.abs(bike.groundPitch) < 0.12) {
+      this._chainT -= dt;
+      if (this._chainT <= 0) {
+        this._bank(false); // ground-only combos still pay out
+        this._count = 0;
+        this.combo = 1;
+        if (this.onCombo) this.onCombo(0, 0, 1);
+      }
+    }
   }
 }

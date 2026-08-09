@@ -79,6 +79,15 @@
       white-space: nowrap; z-index: 15; }
     #stunt-toast.show { transform: translate(-50%, 0) scale(1); opacity: 1; }
     #stunt-toast.bad { color: #ff8a65; }
+    /* Live combo HUD (Phase 3I-1): small, unobtrusive, GPU-cheap */
+    #combo-hud { position: fixed; top: 33%; left: 50%; pointer-events: none;
+      transform: translate(-50%, 0) scale(0.9); opacity: 0;
+      color: #b9f6ca; font-size: clamp(14px, 3.4vmin, 22px); font-weight: 800; letter-spacing: 1px;
+      text-shadow: 0 2px 0 rgba(0,0,0,0.4); transition: transform 0.12s ease-out, opacity 0.15s ease-out;
+      white-space: nowrap; z-index: 15; }
+    #combo-hud.show { opacity: 1; }
+    #combo-hud.pop { transform: translate(-50%, 0) scale(1.12); }
+    #combo-hud.show:not(.pop) { transform: translate(-50%, 0) scale(1); }
 
     /* Summit banner: one reused node, transform/opacity only */
     #summit-banner { position: fixed; top: 16%; left: 50%; pointer-events: none; z-index: 16;
@@ -163,6 +172,7 @@
     <div id="distance">0 m</div>
     <div id="score"></div>
     <div id="stunt-toast"></div>
+    <div id="combo-hud"></div>
     <div id="summit-banner">
       <div class="sb-top">&#127956;&#65039; SUMMIT REACHED</div>
       <div class="sb-name" id="sb-name"></div>

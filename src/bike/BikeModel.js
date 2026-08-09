@@ -160,6 +160,7 @@ export class BikeModel {
   /** Copy physics state onto the visual hierarchy. */
   sync(bike, groundY, groundNormal, world, dt = 1 / 60) {
     this.group.position.copy(bike.position);
+    if (bike.pivotShift) this.group.position.add(bike.pivotShift);
     this.group.quaternion.copy(bike.quaternion);
     this.chassis.position.y = bike.suspension;
 
@@ -195,9 +196,9 @@ export class BikeModel {
       // is wrong on side slopes) is what keeps the tyre visibly seated
       // everywhere; the width term keeps the rim edge out of the ground
       // when the bike leans through corners.
-      const seat = (wheel, off, axisWorld) => {
+      const seat = (wheel, off, axisWorld, lifted) => {
         wheel.getWorldPosition(_wp);
-        if (!bike.grounded) return off * (1 - k); // relax to neutral in the air
+        if (!bike.grounded || lifted) return off * (1 - k); // relax to neutral in the air / mid-stunt
         if (world.getRenderedPlane) {
           world.getRenderedPlane(_wp.x, _wp.z, _plane);
         } else {
@@ -218,11 +219,11 @@ export class BikeModel {
       };
 
       _up.set(0, 1, 0).applyQuaternion(q);                       // rear travel axis
-      this._offR = seat(this.rearWheel, this._offR, _up);
+      this._offR = seat(this.rearWheel, this._offR, _up, bike.groundPitch < -0.04);
       this.rearWheel.position.y = REAR_Y - bike.suspension + this._offR;
 
       _fork.set(0, FORK_AXIS_Y, FORK_AXIS_Z).applyQuaternion(q); // front travel axis
-      this._offF = seat(this.frontWheel, this._offF, _fork);
+      this._offF = seat(this.frontWheel, this._offF, _fork, bike.groundPitch > 0.04);
       this.frontWheel.position.y = FRONT_Y - suspF + this._offF;
     }
 

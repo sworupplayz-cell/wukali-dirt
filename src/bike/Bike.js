@@ -47,6 +47,12 @@ export class Bike {
     this.steer = 0;          // smoothed steering [-1, 1]
     this.roll = 0;           // lean, rad
     this.airPitch = 0;       // extra pitch while airborne, rad
+    this.airPitchTravel = 0; // signed pitch rotation accumulated this flight
+    this.groundPitch = 0;    // wheelie (+) / endo (-) pitch while grounded
+    this.flipDir = 0;        // active flip spin: +1 back, -1 front
+    this.pivotShift = new THREE.Vector3(); // model shift: pitch about the contact wheel
+    this._flipArmT = false;  // throttle released since takeoff (flip re-press arm)
+    this._flipArmB = false;
     this.crashRoll = 0;      // tip-over animation when crashed
     this.grounded = true;
     this.crashed = false;
@@ -89,6 +95,12 @@ export class Bike {
     this.steer = 0;
     this.roll = 0;
     this.airPitch = 0;
+    this.airPitchTravel = 0;
+    this.groundPitch = 0;
+    this.flipDir = 0;
+    this.pivotShift.set(0, 0, 0);
+    this._flipArmT = false;
+    this._flipArmB = false;
     this.crashRoll = 0;
     this.grounded = true;
     this.crashed = false;
@@ -242,6 +254,9 @@ export class Bike {
       this.velocity.y = Math.min(vy, 11) + Math.max(0, -this.suspension) * 3;
       this.position.y = prevY + vy * dt;
       this.slip = 0;
+      this.airPitchTravel = 0;
+      this.flipDir = 0;
+      this._flipArmT = this._flipArmB = false; // flips need a release AFTER takeoff
     } else {
       const rise = groundY - prevY;
       const horiz = Math.abs(this.speed) * dt + 1e-6;
@@ -265,6 +280,20 @@ export class Bike {
       this.steer * 0.5 * Math.min(1, Math.abs(this.speed) / 9) * Math.sign(this.speed >= 0 ? 1 : -1);
     this.roll += (targetRoll - this.roll) * Math.min(1, 8 * dt);
     this.airPitch *= 1 - Math.min(1, 10 * dt);
+
+    // Ground stunts (Phase 3I-1): a committed full-throttle launch lifts
+    // the nose (wheelie); hard braking from speed drops it (endo). Purely
+    // an orientation/feel layer — position, speed and collision never see
+    // it. Gated to flat-ish ground so steep climbs don't pin the nose up.
+    if (!this.crashed && throttle > 0.85 && this.speed > 2.5 && this.speed < 19 &&
+        _v1.y < 0.15 && this.surface.grip > 0.5) {
+      this.groundPitch = Math.min(0.45, this.groundPitch + 1.5 * dt);
+    } else if (!this.crashed && brake > 0.85 && this.speed > 4) {
+      this.groundPitch = Math.max(-0.26, this.groundPitch - 2.0 * dt);
+    } else {
+      this.groundPitch -=
+        Math.sign(this.groundPitch) * Math.min(Math.abs(this.groundPitch), 2.6 * dt);
+    }
   }
 
   _airStep(dt, throttle, brake) {
@@ -275,8 +304,33 @@ export class Bike {
     // Light air control: throttle lifts the nose, brake drops it,
     // steering gives a slow air-turn plus lean. Rates tuned so holding
     // full throttle over a normal jump stays below the crash threshold.
-    this.airPitch += (throttle * 0.9 - brake * 1.4) * dt;
-    this.airPitch = THREE.MathUtils.clamp(this.airPitch, -1.0, 1.0);
+    // FLIPS (Phase 3I-1) are a deliberate commitment: release the input
+    // after takeoff, then RE-press it — throttle spins a backflip, brake
+    // a frontflip. Inputs simply held from before the jump keep the old
+    // gentle authority, so nothing flips by accident.
+    if (throttle < 0.3) this._flipArmT = true;
+    if (brake < 0.3) this._flipArmB = true;
+    if (this.flipDir === 0) {
+      if (this._flipArmT && throttle > 0.6) this.flipDir = 1;
+      else if (this._flipArmB && brake > 0.6) this.flipDir = -1;
+    } else if ((this.flipDir === 1 && throttle < 0.4) ||
+               (this.flipDir === -1 && brake < 0.4)) {
+      this.flipDir = 0;
+    }
+    let dPitch;
+    if (this.flipDir !== 0) {
+      dPitch = this.flipDir * 5.0 * dt; // a full flip takes ~1.26 s of air
+      this.airPitch += dPitch;
+    } else {
+      dPitch = (throttle * 0.9 - brake * 1.4) * dt;
+      this.airPitch += dPitch;
+      if (Math.abs(this.airPitch - dPitch) <= 1.0) {
+        // Gentle mode keeps the old +-1.0 clamp; never snap back mid-flip.
+        this.airPitch = THREE.MathUtils.clamp(this.airPitch, -1.0, 1.0);
+      }
+    }
+    this.airPitchTravel += dPitch;
+    this.groundPitch *= 1 - Math.min(1, 5 * dt);
     this.yaw -= this.steer * 0.8 * dt;
     this.roll += (this.steer * 0.35 - this.roll) * Math.min(1, 3 * dt);
 
@@ -298,6 +352,11 @@ export class Bike {
       this.position.y = groundY;
       this.grounded = true;
       this.slip = 0;
+      this.flipDir = 0;
+      // A completed flip is a level landing: judge (and continue) from the
+      // wrapped angle, so full rotations land clean and half-flips crash.
+      this.airPitch = Math.atan2(Math.sin(this.airPitch), Math.cos(this.airPitch));
+      this.airPitchTravel = 0;
 
       // Keep only the speed component along the bike's heading.
       this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
@@ -390,9 +449,22 @@ export class Bike {
     _m.makeBasis(_v2, this.groundNormal, _v1);
     this.quaternion.setFromRotationMatrix(_m);
 
-    // Local lean (steer + crash tip) and airborne pitch.
+    // Local lean (steer + crash tip) and pitch (airborne + ground stunts).
+    const pitch = this.airPitch + this.groundPitch;
     _qLean.setFromAxisAngle(_axisZ, this.roll + this.crashRoll);
-    _qPitch.setFromAxisAngle(_axisX, -this.airPitch);
+    _qPitch.setFromAxisAngle(_axisX, -pitch);
     this.quaternion.multiply(_qPitch).multiply(_qLean);
+
+    // Wheelies/endos pitch about the CONTACT wheel, not the bike origin:
+    // shift the visual model so the planted wheel stays planted (model
+    // layer only — physics position is untouched).
+    const gp = this.groundPitch;
+    if (this.grounded && Math.abs(gp) > 0.002) {
+      const pz = gp > 0 ? -0.66 : 0.62; // rear / front contact z (local)
+      _v1.set(0, -pz * Math.sin(gp), pz * (1 - Math.cos(gp)));
+      this.pivotShift.copy(_v1.applyQuaternion(this.quaternion));
+    } else {
+      this.pivotShift.set(0, 0, 0);
+    }
   }
 }
