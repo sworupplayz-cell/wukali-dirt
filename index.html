@@ -51,17 +51,66 @@
     #btn-brake { right: calc(max(12px, env(safe-area-inset-right)) + clamp(80px, 18vmin, 120px) + 16px); bottom: 14px;
       width: clamp(66px, 14vmin, 95px); height: clamp(66px, 14vmin, 95px); font-size: 16px; border-radius: 50%; }
 
-    /* Phase 3I-5: STUNT (left, above steering) and TRICK (right, above brake) */
+    /* Phase 3J: STUNT and TRICK are circular thumb buttons */
     #btn-stunt { left: max(12px, env(safe-area-inset-left));
-      bottom: calc(14px + clamp(70px, 16vmin, 110px) + 12px);
-      width: clamp(84px, 15vmin, 118px); height: clamp(44px, 9vmin, 60px); font-size: 15px;
-      border-radius: 999px; background: rgba(0, 121, 107, 0.34); border-color: rgba(128, 222, 234, 0.55); }
+      bottom: calc(14px + clamp(70px, 16vmin, 110px) + 14px);
+      width: clamp(64px, 13vmin, 92px); height: clamp(64px, 13vmin, 92px); font-size: 14px;
+      border-radius: 50%; background: rgba(0, 121, 107, 0.34); border-color: rgba(128, 222, 234, 0.55); }
     #btn-stunt.active { background: rgba(0, 188, 170, 0.6); border-color: rgba(255,255,255,0.85); }
     #btn-trick { right: calc(max(12px, env(safe-area-inset-right)) + clamp(80px, 18vmin, 120px) + 16px);
-      bottom: calc(14px + clamp(66px, 14vmin, 95px) + 12px);
-      width: clamp(84px, 15vmin, 118px); height: clamp(44px, 9vmin, 60px); font-size: 15px;
-      border-radius: 999px; background: rgba(123, 31, 162, 0.36); border-color: rgba(225, 190, 231, 0.55); }
+      bottom: calc(14px + clamp(66px, 14vmin, 95px) + 14px);
+      width: clamp(64px, 13vmin, 92px); height: clamp(64px, 13vmin, 92px); font-size: 14px;
+      border-radius: 50%; background: rgba(123, 31, 162, 0.36); border-color: rgba(225, 190, 231, 0.55); }
     #btn-trick.active { background: rgba(186, 104, 200, 0.65); border-color: rgba(255,255,255,0.85); }
+
+    /* Phase 3J: virtual handlebar (steering mode) */
+    #handlebar { position: fixed; left: calc(max(12px, env(safe-area-inset-left)) + clamp(90px, 20vmin, 130px));
+      bottom: 26px; width: clamp(160px, 34vmin, 230px); height: clamp(40px, 8vmin, 54px);
+      transform: translateX(-50%) rotate(var(--hbr, 0deg)); touch-action: none; z-index: 12; }
+    #handlebar .hb-bar { position: absolute; left: 0; right: 0; top: 50%; height: 12px; margin-top: -6px;
+      border-radius: 8px; background: rgba(255,255,255,0.28); border: 1px solid rgba(255,255,255,0.35); }
+    #handlebar .hb-grip { position: absolute; top: 50%; width: 26%; height: 26px; margin-top: -13px;
+      border-radius: 12px; background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.5); }
+    #handlebar .hb-grip.l { left: -2%; } #handlebar .hb-grip.r { right: -2%; }
+    #handlebar .hb-stem { position: absolute; left: 50%; top: 50%; width: 14px; height: 22px;
+      margin: -4px 0 0 -7px; border-radius: 4px; background: rgba(255,255,255,0.35); }
+    #handlebar.active .hb-bar { background: rgba(255, 183, 77, 0.55); }
+
+    /* Phase 3J: swipe steering zone */
+    #swipe-zone { position: fixed; left: calc(max(12px, env(safe-area-inset-left)) + clamp(90px, 20vmin, 130px));
+      bottom: 14px; width: clamp(170px, 36vmin, 240px); height: clamp(70px, 16vmin, 110px);
+      transform: translateX(-50%); border: 2px dashed rgba(255,255,255,0.3); border-radius: 18px;
+      display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.4);
+      font-weight: 800; font-size: 13px; letter-spacing: 2px; touch-action: none; z-index: 12; }
+    #swipe-zone.active { border-color: rgba(255,183,77,0.7); color: rgba(255,255,255,0.7); }
+
+    /* Phase 3J: settings */
+    .set-label { color: rgba(255,255,255,0.75); font-size: 13px; font-weight: 800; letter-spacing: 1.5px;
+      margin-top: 4px; }
+    .seg { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .seg button { padding: 10px 14px; border: 2px solid rgba(255,255,255,0.25); border-radius: 10px;
+      background: rgba(255,255,255,0.1); color: #fff; font-weight: 800; font-size: 13px; }
+    .seg button.on { background: #ff7a1a; border-color: #ffb87a; }
+    input[type="range"] { width: clamp(200px, 50vmin, 300px); accent-color: #ff7a1a; }
+
+    /* Phase 3J: HUD editor */
+    #hudedit-overlay { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.25);
+      touch-action: none; }
+    #he-hint { position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+      color: #fff; font-size: 13px; font-weight: 700; background: rgba(0,0,0,0.55);
+      padding: 6px 14px; border-radius: 10px; pointer-events: none; }
+    #he-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; align-items: center;
+      justify-content: center; gap: 12px; flex-wrap: wrap; padding: 10px;
+      background: rgba(0,0,0,0.65); }
+    #he-bar .set-label { margin: 0; }
+    #he-bar input[type="range"] { width: clamp(90px, 22vmin, 150px); }
+    #he-bar button { padding: 9px 16px; border: none; border-radius: 10px; font-weight: 800;
+      background: rgba(255,255,255,0.16); color: #fff; }
+    #he-bar #he-done { background: #ff7a1a; }
+    #he-name { color: #ffe082; font-weight: 900; font-size: 14px; min-width: 110px; text-align: center; }
+    #hud.editing .ctl, #hud.editing #handlebar, #hud.editing #swipe-zone {
+      pointer-events: none; outline: 2px dashed rgba(255,255,255,0.5); }
+    #hud.editing .he-sel { outline: 3px solid #ffb74d; }
 
     #btn-pause { top: 10px; right: max(12px, env(safe-area-inset-right));
       width: clamp(46px, 9vmin, 60px); height: clamp(46px, 9vmin, 60px); font-size: 20px; border-radius: 12px; }
@@ -143,6 +192,7 @@
       <div class="subtitle">Off-road dirt bike &mdash; Phase 1 prototype</div>
       <button class="menu-btn" id="btn-play">PLAY</button>
       <button class="menu-btn secondary" id="btn-music">MUSIC: ON</button>
+      <button class="menu-btn secondary" id="btn-settings">SETTINGS</button>
       <button class="menu-btn secondary" id="btn-about">ABOUT</button>
       <button class="menu-btn secondary" id="btn-exit">EXIT</button>
       <div id="rotate-hint">Tip: rotate to landscape for the best experience</div>
@@ -181,6 +231,41 @@
     </div>
   </div>
 
+  <!-- Settings (Phase 3J) -->
+  <div id="settings-overlay" class="overlay hidden">
+    <div class="panel">
+      <div class="title" style="font-size:clamp(22px,5vmin,34px);">SETTINGS</div>
+      <div class="set-label">STEERING MODE</div>
+      <div class="seg" id="steer-modes">
+        <button data-mode="handlebar">HANDLEBAR</button>
+        <button data-mode="buttons">BUTTONS</button>
+        <button data-mode="tilt">TILT</button>
+        <button data-mode="swipe">SWIPE</button>
+      </div>
+      <div class="set-label">STEERING SENSITIVITY <span id="sens-steer-val"></span></div>
+      <input type="range" id="sens-steer" min="50" max="150" step="5">
+      <div class="set-label">TILT SENSITIVITY <span id="sens-tilt-val"></span></div>
+      <input type="range" id="sens-tilt" min="50" max="200" step="10">
+      <button class="menu-btn secondary" id="btn-calibrate">CALIBRATE TILT CENTER</button>
+      <button class="menu-btn secondary" id="btn-hud-edit">CUSTOMIZE CONTROLS</button>
+      <button class="menu-btn" id="btn-settings-back">BACK</button>
+    </div>
+  </div>
+
+  <!-- HUD layout editor (Phase 3J) -->
+  <div id="hudedit-overlay" class="hidden">
+    <div id="he-hint">Drag a control to move it &middot; tap to select</div>
+    <div id="he-bar">
+      <span id="he-name">TAP A CONTROL</span>
+      <span class="set-label">SIZE</span>
+      <input type="range" id="he-size" min="70" max="160" step="5" disabled>
+      <span class="set-label">OPACITY</span>
+      <input type="range" id="he-opacity" min="35" max="100" step="5" disabled>
+      <button id="he-reset">RESET</button>
+      <button id="he-done">SAVE</button>
+    </div>
+  </div>
+
   <!-- HUD -->
   <div id="hud" class="hidden">
     <div id="speedo">0 <span>km/h</span></div>
@@ -195,6 +280,8 @@
     </div>
     <div class="ctl" id="btn-left"   data-control="left">&#9664;</div>
     <div class="ctl" id="btn-right"  data-control="right">&#9654;</div>
+    <div id="handlebar" class="hidden"><div class="hb-bar"></div><div class="hb-grip l"></div><div class="hb-grip r"></div><div class="hb-stem"></div></div>
+    <div id="swipe-zone" class="hidden">&#8596; SWIPE</div>
     <div class="ctl" id="btn-brake"  data-control="brake">BRAKE</div>
     <div class="ctl" id="btn-gas"    data-control="gas">GAS</div>
     <div class="ctl" id="btn-stunt"  data-control="stunt">STUNT</div>

@@ -8,6 +8,7 @@ import { GameAudio } from './GameAudio.js';
 import { RunStats } from './RunStats.js';
 import { StuntTracker } from './StuntTracker.js';
 import { Achievements } from './Achievements.js';
+import { Settings } from './Settings.js';
 
 export const State = {
   MENU: 'menu',
@@ -43,6 +44,8 @@ export class Game {
     this.bikeModel = new BikeModel(this.scene);
     this.followCam = new FollowCamera(this.camera, this.world);
     this.input = new Input();
+    this.settings = new Settings();
+    this.input.attachSettings(this.settings);
     this.audio = new GameAudio();
     this.run = new RunStats();
     this.stunts = new StuntTracker();
