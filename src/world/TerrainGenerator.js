@@ -208,6 +208,9 @@ export class TerrainGenerator {
           phi: hash01(cx, cz, this.SMt + 6) * 2 * Math.PI,
           rStart,
           k: (rStart - ROAD_END_R) / uMax,
+          // Fixed modulation used along the road so the spiral never
+          // inherits the flank shape-noise as sudden pitch changes.
+          modC: 0.85 + 0.34 * hash01(cx, cz, this.SMt + 9),
         };
       }
       this._mcells.set(key, mn);
@@ -305,30 +308,36 @@ export class TerrainGenerator {
     const mtn = this._mountainNear(x, z);
     const mtnD = this._mtnD;
     let mProf = 0, mMod = 1, mCore = 0;
-    let roadMask = 0, roadDelta = 0;
+    let roadMask = 0, roadDelta = 0, modBlend = 0;
     if (mtn) {
       const t = mtnD / mtn.R;
       if (t < 1) {
         const q = 1 - t * t;
         mProf = q * q;
       }
-      mMod = 0.78 + 0.5 * vnoise(x * 0.009 + 3.3, z * 0.009 - 7.7, this.SMt + 8);
+      mMod = 0.85 + 0.34 * vnoise(x * 0.0045 + 3.3, z * 0.0045 - 7.7, this.SMt + 8);
       mCore = sstep(0.02, 0.22, mProf);
 
-      // Spiral road: nearest winding at this angle; the road band cancels
-      // the dome's radial slope so the route stays rideable.
+      // Spiral road: nearest winding at this angle. The narrow band cancels
+      // the dome's radial slope; a wider shoulder blends the flank shape-
+      // modulation toward a per-mountain constant so the road itself climbs
+      // steadily (bench-cut look on strong flanks).
       let u = Math.atan2(z - mtn.z, x - mtn.x) - mtn.phi;
       u -= Math.floor(u / (2 * Math.PI)) * 2 * Math.PI; // 0..2π
+      let bestDr = Infinity, bestRk = 0;
       for (; u <= mtn.uMax; u += 2 * Math.PI) {
         const rk = mtn.rStart - mtn.k * u;
-        const mask = sstep(6.2, 3.6, Math.abs(mtnD - rk));
-        if (mask > roadMask) {
-          roadMask = mask;
-          const tk = rk / mtn.R;
-          const qk = tk < 1 ? 1 - tk * tk : 0;
-          roadDelta = (qk * qk - mProf) * mtn.H * mMod;
-        }
+        const dr = Math.abs(mtnD - rk);
+        if (dr < bestDr) { bestDr = dr; bestRk = rk; }
       }
+      if (bestDr < 26) {
+        roadMask = sstep(6.2, 3.6, bestDr);
+        modBlend = sstep(26, 7, bestDr);
+        const tk = bestRk / mtn.R;
+        const qk = tk < 1 ? 1 - tk * tk : 0;
+        roadDelta = (qk * qk - mProf) * mtn.H;
+      }
+      if (modBlend > 0) mMod += (mtn.modC - mMod) * modBlend;
     }
 
     // Biome fields.
@@ -354,6 +363,7 @@ export class TerrainGenerator {
     // cannot represent it, and the visual/collision gap it causes is far
     // more noticeable on steep slopes than the detail itself.
     const rockDetail = (wRk + wMnt * 1.5 + 0.3) * (1 - 0.75 * mCore);
+    const hSmooth = n1 * amp; // single-octave base: mountain roads ride this
     let hGentle = (n1 + 0.5 * n2) * amp;
     let h = hGentle + (0.25 * n3 * (rockDetail + 0.4) + 0.11 * n4 * rockDetail) * amp;
 
@@ -361,7 +371,7 @@ export class TerrainGenerator {
     if (wMnt + wRk > 0.001) {
       let rr = 1 - Math.abs(2 * vnoise(x * 0.0055 + 3.1, z * 0.0055 - 12.7, this.SR) - 1);
       rr *= rr;
-      const ridge = rr * (20 * wMnt + 3.5 * wRk) * (1 - 0.85 * mCore);
+      const ridge = rr * (20 * wMnt + 3.5 * wRk) * (1 - mCore);
       h += ridge;
       hGentle += ridge * 0.8;
     }
@@ -393,16 +403,19 @@ export class TerrainGenerator {
       sstep(wV, wV * 0.4, Math.abs(t1)),
       sstep(wV * 0.85, wV * 0.35, Math.abs(t2))
     ) * (1 - mCore);
-    // The mountain approach road behaves like a trail while still on the
-    // surrounding terrain; on the dome the roadDelta pass takes over.
-    const flattenM = Math.max(trailM, roadMask * (1 - mCore));
-    h += (hGentle * 0.92 - h) * flattenM * 0.85;
+    // The mountain road flattens base-terrain detail along its band both on
+    // and off the dome (the dome's own slope is cancelled separately below);
+    // on the dome it references the smoothest single-octave base so the
+    // climb never inherits base bumps as sudden pitch changes.
+    const flattenM = Math.max(trailM, roadMask);
+    const hRef = (hGentle + (hSmooth - hGentle) * mCore) * 0.92;
+    h += (hRef - h) * flattenM * 0.85;
 
     // Mountain dome + rideable spiral road.
     if (mtn) {
       h += mtn.H * mProf * mMod;
       if (roadMask > 0) {
-        h += roadDelta * roadMask;
+        h += roadDelta * mMod * roadMask;
         if (roadMask * 0.95 > trailM) trailM = roadMask * 0.95; // dirt color
       }
     }

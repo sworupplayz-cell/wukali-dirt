@@ -418,35 +418,36 @@ function check(name, ok, detail = '') {
   });
   check('Nearest mountain discoverable from anywhere', !!nearM, JSON.stringify(nearM));
 
-  // Road quality: monotonic climb, rideable slope, flat across the band.
+  // Road quality at 1% sampling: rideable grade, bounded dips, flat band.
   const road = await page.evaluate(() => {
     const g = window.__game;
     const m = g.world.nearestMountain(g.bike.position.x, g.bike.position.z);
-    const hs = [], fr = [];
-    for (let f = 0.05; f <= 1.001; f += 0.05) {
+    let maxGrade = 0, dip = 0, maxDip = 0, cross = 0, prev = null, prevP = null;
+    let first = null, last = null;
+    for (let f = 0.05; f <= 1.0; f += 0.01) {
       const p = g.world.roadPoint(m, f);
-      hs.push(g.world.getHeight(p.x, p.z));
-      fr.push(f);
+      const h = g.world.getHeight(p.x, p.z);
+      if (first === null) first = h;
+      last = h;
+      if (prev !== null) {
+        const len = Math.hypot(p.x - prevP.x, p.z - prevP.z);
+        maxGrade = Math.max(maxGrade, Math.abs(h - prev) / len);
+        if (f > 0.4) { if (h < prev) dip += prev - h; else { maxDip = Math.max(maxDip, dip); dip = 0; } }
+      }
+      prev = h; prevP = p;
+      if (f > 0.5 && f < 0.95) {
+        const px = Math.sin(p.yaw + Math.PI / 2), pz2 = Math.cos(p.yaw + Math.PI / 2);
+        cross = Math.max(cross, Math.abs(g.world.getHeight(p.x + px * 2.5, p.z + pz2 * 2.5) -
+          g.world.getHeight(p.x - px * 2.5, p.z - pz2 * 2.5)));
+      }
     }
-    let maxDip = 0, maxSlope = 0;
-    for (let i = 1; i < hs.length; i++) {
-      if (fr[i] > 0.4) maxDip = Math.max(maxDip, hs[i - 1] - hs[i]);
-      // segment length along the spiral for df=0.05
-      const p1 = g.world.roadPoint(m, 0.05 * i), p0 = g.world.roadPoint(m, 0.05 * (i - 1));
-      const len = Math.hypot(p1.x - p0.x, p1.z - p0.z);
-      maxSlope = Math.max(maxSlope, Math.abs(hs[i] - hs[i - 1]) / len);
-    }
-    const mid = g.world.roadPoint(m, 0.7);
-    const px = Math.sin(mid.yaw + Math.PI / 2), pz = Math.cos(mid.yaw + Math.PI / 2);
-    const cross = Math.abs(
-      g.world.getHeight(mid.x + px * 2.5, mid.z + pz * 2.5) -
-      g.world.getHeight(mid.x - px * 2.5, mid.z - pz * 2.5));
-    return { climb: +(hs[hs.length - 1] - hs[0]).toFixed(1), maxDip: +maxDip.toFixed(2),
-      maxSlope: +maxSlope.toFixed(3), cross: +cross.toFixed(2) };
+    maxDip = Math.max(maxDip, dip);
+    return { climb: +(last - first).toFixed(1), maxDip: +maxDip.toFixed(1),
+      maxGrade: +maxGrade.toFixed(3), cross: +cross.toFixed(2) };
   });
   check('Road climbs to the summit', road.climb > 30, `+${road.climb} m`);
-  check('Road climbs steadily on the mountain', road.maxDip < 8, `maxDip=${road.maxDip} m`);
-  check('Road slope stays rideable', road.maxSlope < 0.3, `maxSlope=${road.maxSlope}`);
+  check('Road grade stays rideable (1% sampling)', road.maxGrade < 0.3, `maxGrade=${road.maxGrade}`);
+  check('Road dips stay bounded on the dome', road.maxDip < 12, `maxDip=${road.maxDip} m`);
   check('Road is flat across its width', road.cross < 1.6, `cross=${road.cross} m`);
 
   // THE CLIMB: autopilot follows the road from mid-mountain to the summit.
