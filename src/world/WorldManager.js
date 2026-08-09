@@ -42,6 +42,34 @@ export class WorldManager {
     return out;
   }
 
+  /**
+   * The RENDERED terrain surface near the player (Phase 3H-1). The visual
+   * mesh is the analytic heightfield sampled on a globally-aligned 2 m
+   * lattice and triangulated with a fixed diagonal — between vertices it
+   * deviates from the smooth analytic surface (up to ~0.3 m in rocky
+   * detail). Anything that must visually touch the ground (tyres, blob
+   * shadow) has to seat on THIS surface, not the analytic one. Exact
+   * reconstruction: 4 analytic samples, the same triangle split as
+   * buildChunkGeometry (diagonal (i+1,j)-(i,j+1)), and the triangle's own
+   * plane normal. Chunks under/next to the bike always use the 2 m grid.
+   */
+  getRenderedPlane(x, z, out) {
+    const cs = 2; // inner-ring cell size (CHUNK_SIZE 64 / res 32)
+    const gen = this.generator;
+    const gx = Math.floor(x / cs) * cs, gz = Math.floor(z / cs) * cs;
+    const fx = (x - gx) / cs, fz = (z - gz) / cs;
+    const h00 = gen.height(gx, gz), h10 = gen.height(gx + cs, gz);
+    const h01 = gen.height(gx, gz + cs), h11 = gen.height(gx + cs, gz + cs);
+    if (fx + fz <= 1) {
+      out.y = h00 + (h10 - h00) * fx + (h01 - h00) * fz;
+      out.n.set(-(h10 - h00) / cs, 1, -(h01 - h00) / cs).normalize();
+    } else {
+      out.y = h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
+      out.n.set(-(h11 - h01) / cs, 1, -(h11 - h10) / cs).normalize();
+    }
+    return out;
+  }
+
   getColliders() {
     return this.chunks.activeColliders;
   }

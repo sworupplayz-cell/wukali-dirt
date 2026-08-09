@@ -183,46 +183,62 @@ export class BikeModel {
       this.rearWheel.position.y = REAR_Y - bike.suspension + this._offR;
       this.frontWheel.position.y = FRONT_Y - suspF + this._offF;
 
-      // Effective tyre radius shrinks a little as the bike leans (the
-      // lowest rim point of a tilted disc).
-      _axle.set(1, 0, 0).applyQuaternion(q);
-      const rEff = WHEEL_R * Math.max(0.85, Math.sqrt(1 - _axle.y * _axle.y));
+      const k = 1 - Math.exp(-45 * dt); // fast wheel travel (tracks the mesh at speed)
 
-      const k = 1 - Math.exp(-28 * dt); // smooth wheel travel (no popping)
+      // Contact support: the tyre is a cylinder (radius r, width w). Against
+      // the LOCAL RENDERED-SURFACE PLANE with unit normal n and wheel axle
+      // a, the center-to-plane contact distance is
+      //   s = r * sqrt(1 - (a.n)^2) + (w/2) * |a.n|
+      // converted to a vertical gap via s / n.y. Using the plane of the
+      // triangle the player actually SEES (not the analytic surface, which
+      // deviates between mesh vertices; and not the world vertical, which
+      // is wrong on side slopes) is what keeps the tyre visibly seated
+      // everywhere; the width term keeps the rim edge out of the ground
+      // when the bike leans through corners.
+      const seat = (wheel, off, axisWorld) => {
+        wheel.getWorldPosition(_wp);
+        if (!bike.grounded) return off * (1 - k); // relax to neutral in the air
+        if (world.getRenderedPlane) {
+          world.getRenderedPlane(_wp.x, _wp.z, _plane);
+        } else {
+          _plane.y = world.getHeight(_wp.x, _wp.z);
+          world.getNormal(_wp.x, _wp.z, _plane.n);
+        }
+        const n = _plane.n;
+        // Actual world axle from the wheel's fresh matrixWorld (column 0):
+        // includes steering for the front wheel.
+        const e = wheel.matrixWorld.elements;
+        _axle.set(e[0], e[1], e[2]).normalize();
+        const an = Math.abs(_axle.dot(n));
+        const s = WHEEL_R * Math.sqrt(Math.max(0, 1 - an * an)) + HALF_W * an;
+        const targetY = _plane.y + s / Math.max(0.55, n.y);
+        const dyWorld = targetY - (_wp.y - off * axisWorld.y);
+        const t = THREE.MathUtils.clamp(dyWorld / Math.max(0.45, axisWorld.y), -0.28, 0.36);
+        return off + (t - off) * k;
+      };
 
-      // Rear: travel axis = chassis up.
-      _up.set(0, 1, 0).applyQuaternion(q);
-      this.rearWheel.getWorldPosition(_wp);
-      let target = 0;
-      if (bike.grounded) {
-        const gy = world.getHeight(_wp.x, _wp.z);
-        const dyWorld = gy + rEff - (_wp.y - this._offR * _up.y);
-        target = THREE.MathUtils.clamp(dyWorld / Math.max(0.45, _up.y), -0.26, 0.30);
-      }
-      this._offR += (target - this._offR) * k;
+      _up.set(0, 1, 0).applyQuaternion(q);                       // rear travel axis
+      this._offR = seat(this.rearWheel, this._offR, _up);
       this.rearWheel.position.y = REAR_Y - bike.suspension + this._offR;
 
-      // Front: travel axis = fork/rake axis (steering spins around it, so
-      // a shift along it is steering-invariant).
-      _fork.set(0, FORK_AXIS_Y, FORK_AXIS_Z).applyQuaternion(q);
-      this.frontWheel.getWorldPosition(_wp);
-      target = 0;
-      if (bike.grounded) {
-        const gy = world.getHeight(_wp.x, _wp.z);
-        const dyWorld = gy + rEff - (_wp.y - this._offF * _fork.y);
-        target = THREE.MathUtils.clamp(dyWorld / Math.max(0.45, _fork.y), -0.28, 0.32);
-      }
-      this._offF += (target - this._offF) * k;
+      _fork.set(0, FORK_AXIS_Y, FORK_AXIS_Z).applyQuaternion(q); // front travel axis
+      this._offF = seat(this.frontWheel, this._offF, _fork);
       this.frontWheel.position.y = FRONT_Y - suspF + this._offF;
     }
 
-    // Blob shadow hugs the terrain (aligned to its normal) and fades with height.
+    // Blob shadow hugs the RENDERED terrain (the visible triangle plane —
+    // the analytic surface can sit below it) and fades with height.
+    let sy = groundY, sn = groundNormal;
+    if (world && world.getRenderedPlane) {
+      world.getRenderedPlane(bike.position.x, bike.position.z, _plane);
+      sy = _plane.y; sn = _plane.n;
+    }
     this.shadow.position.set(
-      bike.position.x + groundNormal.x * 0.08,
-      groundY + groundNormal.y * 0.08,
-      bike.position.z + groundNormal.z * 0.08
+      bike.position.x + sn.x * 0.08,
+      sy + sn.y * 0.08,
+      bike.position.z + sn.z * 0.08
     );
-    this.shadow.quaternion.setFromUnitVectors(_planeUp, groundNormal);
+    this.shadow.quaternion.setFromUnitVectors(_planeUp, sn);
     const h = Math.max(0, bike.heightAboveGround);
     const f = Math.max(0.25, 1 - h * 0.18);
     this.shadow.scale.setScalar(f);
@@ -233,6 +249,7 @@ export class BikeModel {
 const _planeUp = new THREE.Vector3(0, 0, 1); // PlaneGeometry faces +Z
 // Wheel-contact geometry (matches the constructor's local poses above).
 const WHEEL_R = 0.34;
+const HALF_W = 0.045;       // half tyre width (cylinder height 0.09)
 const REAR_Y = 0.34;        // rear wheel base local y (chassis space)
 const FRONT_Y = -0.63;      // front wheel base local y (steer space)
 const FORK_AXIS_Y = Math.cos(0.42);  // rake axis in chassis space
@@ -241,6 +258,7 @@ const _up = new THREE.Vector3();
 const _fork = new THREE.Vector3();
 const _axle = new THREE.Vector3();
 const _wp = new THREE.Vector3();
+const _plane = { y: 0, n: new THREE.Vector3(0, 1, 0) }; // rendered-surface plane
 
 /**
  * Low-poly rider in a fictional Nepali-inspired outfit: cream daura shirt
