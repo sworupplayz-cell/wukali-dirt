@@ -23,6 +23,24 @@ export class Achievements {
     this._data.summits = this._data.summits || {};
     this._data.meta = this._data.meta || {};
     this._data.trials = this._data.trials || {};
+    this._data.discoveries = this._data.discoveries || {};
+  }
+
+  /**
+   * Nature discovery (Phase 3K-2): lakes, waterfalls, viewpoints.
+   * Returns null if already discovered, else { name, count, meta }.
+   */
+  discover(id, name) {
+    if (this._data.discoveries[id]) return null;
+    this._data.discoveries[id] = name;
+    const count = Object.keys(this._data.discoveries).length;
+    let meta = null;
+    if (count >= 5 && !this._data.meta.explorer) {
+      this._data.meta.explorer = true;
+      meta = 'Explorer';
+    }
+    this._save();
+    return { name, count, meta };
   }
 
   /**
@@ -75,6 +93,7 @@ export class Achievements {
       summits: { ...this._data.summits },
       meta: META.filter((a) => this._data.meta[a.id]).map((a) => a.title),
       trials: { ...this._data.trials },
+      discoveries: { ...this._data.discoveries },
     };
   }
 

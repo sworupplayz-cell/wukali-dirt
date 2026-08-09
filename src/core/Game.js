@@ -10,6 +10,7 @@ import { StuntTracker } from './StuntTracker.js';
 import { Achievements } from './Achievements.js';
 import { Settings } from './Settings.js';
 import { TimeTrial } from './TimeTrial.js';
+import { NatureSpots } from '../world/NatureSpots.js';
 
 export const State = {
   MENU: 'menu',
@@ -52,6 +53,8 @@ export class Game {
     this.stunts = new StuntTracker();
     this.achievements = new Achievements();
     this.trials = new TimeTrial(this.scene, this.world, this.achievements);
+    this.nature = new NatureSpots(this.scene, this.world.generator, seed);
+    this.onDiscover = null; // UI shows the discovery toast
     this.onSummit = null; // UI shows the summit banner
     this.newBest = false; // set when the run that just ended beat the best
     this._summitT = 0;
@@ -219,6 +222,14 @@ export class Game {
       // Time trials (Phase 3K-1): 2 Hz gate scan when idle, one distance
       // check per frame while running.
       if (this.state === State.PLAYING) this.trials.update(this.bike, frameDt);
+      // Nature discoveries (Phase 3K-2): 2 Hz proximity scan.
+      if (this.state === State.PLAYING) {
+        const rec = this.nature.update(this.bike.position.x, this.bike.position.z, frameDt);
+        if (rec) {
+          const res = this.achievements.discover(rec.id, rec.name);
+          if (res && this.onDiscover) this.onDiscover({ ...res, type: rec.type });
+        }
+      }
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(
         Math.abs(this.bike.speed) / 26,

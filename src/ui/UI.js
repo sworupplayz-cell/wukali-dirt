@@ -22,6 +22,7 @@ export class UI {
     this.score = $('score');
     this.stuntToast = $('stunt-toast');
     this.trialHud = $('trial-hud');
+    this.discoveryToast = $('discovery-toast');
     this.summitBanner = $('summit-banner');
     this.toast = $('toast');
 
@@ -204,6 +205,16 @@ export class UI {
         this.trialHud.classList.add('show');
         this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 2200);
       }
+    };
+
+    // Nature discovery toast (Phase 3K-2).
+    game.onDiscover = (d) => {
+      const icon = d.type === 'lake' ? '\u{1F30A}' : d.type === 'wf' ? '\u{1F4A7}' : '\u{1F3D4}\uFE0F';
+      this.discoveryToast.textContent =
+        `${icon} DISCOVERED \u00B7 ${d.name}${d.meta ? ` \u00B7 \u{1F3C6} ${d.meta}` : ''}`;
+      this.discoveryToast.classList.add('show');
+      clearTimeout(this._discT);
+      this._discT = setTimeout(() => this.discoveryToast.classList.remove('show'), 3500);
     };
 
     // HUD readouts: update at 5 Hz, not per frame (avoids DOM churn).

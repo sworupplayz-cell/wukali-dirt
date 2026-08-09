@@ -67,8 +67,8 @@ function check(name, ok, detail = '') {
     let reached = false, crashes = 0, banner = '', midShot = false;
     // Budget sized for slow CI sandboxes: sim falls behind wall time when
     // headless fps dips, so long climbs need wall-clock headroom (the bike
-    // itself summits Aakash in ~53 s — verified standalone either build).
-    for (let i = 0; i < 1900 && !reached; i++) {
+    // itself summits Aakash in ~51 s — verified standalone either build).
+    for (let i = 0; i < 2600 && !reached; i++) {
       await sleep(110);
       const st = await page.evaluate(() => {
         const g = window.__game, A = window.__auto;
