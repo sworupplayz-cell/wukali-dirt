@@ -8,6 +8,8 @@ export class Input {
     this.throttle = 0;
     this.brake = 0;
     this.steer = 0;
+    this.lean = 0;   // hold: active body lean (ground) / orientation recovery (air)
+    this.trick = 0;  // hold: committed air rotation (flips)
     this.enabled = true;
 
     this.onPause = null;
@@ -15,7 +17,7 @@ export class Input {
     this.onPov = null;
 
     this._keys = new Set();
-    this._touch = { gas: false, brake: false, left: false, right: false };
+    this._touch = { gas: false, brake: false, left: false, right: false, lean: false, trick: false };
 
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
@@ -57,7 +59,7 @@ export class Input {
   /** Recompute the control state; called once per rendered frame. */
   update() {
     if (!this.enabled) {
-      this.throttle = this.brake = this.steer = 0;
+      this.throttle = this.brake = this.steer = this.lean = this.trick = 0;
       return;
     }
     const k = this._keys, t = this._touch;
@@ -66,5 +68,7 @@ export class Input {
     const left = k.has('KeyA') || k.has('ArrowLeft') || t.left;
     const right = k.has('KeyD') || k.has('ArrowRight') || t.right;
     this.steer = (right ? 1 : 0) - (left ? 1 : 0);
+    this.lean = k.has('ShiftLeft') || k.has('ShiftRight') || t.lean ? 1 : 0;
+    this.trick = k.has('Space') || t.trick ? 1 : 0;
   }
 }

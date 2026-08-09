@@ -51,6 +51,18 @@
     #btn-brake { right: calc(max(12px, env(safe-area-inset-right)) + clamp(80px, 18vmin, 120px) + 16px); bottom: 14px;
       width: clamp(66px, 14vmin, 95px); height: clamp(66px, 14vmin, 95px); font-size: 16px; border-radius: 50%; }
 
+    /* Phase 3I-2: LEAN (left, above steering) and TRICK (right, above brake) */
+    #btn-lean { left: max(12px, env(safe-area-inset-left));
+      bottom: calc(14px + clamp(70px, 16vmin, 110px) + 12px);
+      width: clamp(84px, 15vmin, 118px); height: clamp(44px, 9vmin, 60px); font-size: 15px;
+      border-radius: 999px; background: rgba(0, 121, 107, 0.34); border-color: rgba(128, 222, 234, 0.55); }
+    #btn-lean.active { background: rgba(0, 188, 170, 0.6); border-color: rgba(255,255,255,0.85); }
+    #btn-trick { right: calc(max(12px, env(safe-area-inset-right)) + clamp(80px, 18vmin, 120px) + 16px);
+      bottom: calc(14px + clamp(66px, 14vmin, 95px) + 12px);
+      width: clamp(84px, 15vmin, 118px); height: clamp(44px, 9vmin, 60px); font-size: 15px;
+      border-radius: 999px; background: rgba(123, 31, 162, 0.36); border-color: rgba(225, 190, 231, 0.55); }
+    #btn-trick.active { background: rgba(186, 104, 200, 0.65); border-color: rgba(255,255,255,0.85); }
+
     #btn-pause { top: 10px; right: max(12px, env(safe-area-inset-right));
       width: clamp(46px, 9vmin, 60px); height: clamp(46px, 9vmin, 60px); font-size: 20px; border-radius: 12px; }
     #btn-reset { top: 10px; right: calc(max(12px, env(safe-area-inset-right)) + clamp(46px, 9vmin, 60px) + 10px);
@@ -182,6 +194,8 @@
     <div class="ctl" id="btn-right"  data-control="right">&#9654;</div>
     <div class="ctl" id="btn-brake"  data-control="brake">BRAKE</div>
     <div class="ctl" id="btn-gas"    data-control="gas">GAS</div>
+    <div class="ctl" id="btn-lean"   data-control="lean">LEAN</div>
+    <div class="ctl" id="btn-trick"  data-control="trick">TRICK</div>
     <div class="ctl" id="btn-pause">&#10074;&#10074;</div>
     <div class="ctl" id="btn-reset">&#8634;</div>
     <div class="ctl" id="btn-pov">POV</div>
