@@ -144,8 +144,13 @@ export class Bike {
     _v1.copy(this.forward).addScaledVector(n, -this.forward.dot(n)).normalize();
 
     // Speed: throttle tapers near max, brake reverses slowly, drag otherwise.
+    // Drive force is traction-limited: grip fades on steep faces, so walls
+    // can only be rushed on momentum — never powered up. Roads/moderate
+    // slopes (< ~30 deg) keep full grip.
+    const climb = Math.max(0, _v1.y);
+    const grip = 1 - 0.75 * Math.min(1, Math.max(0, (climb - 0.55) / 0.3));
     if (throttle > 0) {
-      this.speed += ACCEL * (1 - Math.max(this.speed, 0) / MAX_SPEED) * throttle * dt;
+      this.speed += ACCEL * grip * (1 - Math.max(this.speed, 0) / MAX_SPEED) * throttle * dt;
     } else if (brake > 0) {
       if (this.speed > 0.3) this.speed -= BRAKE_DECEL * brake * dt;
       else this.speed = Math.max(this.speed - REVERSE_ACCEL * brake * dt, MAX_REVERSE);
@@ -153,8 +158,13 @@ export class Bike {
       this.speed *= 1 - Math.min(1, 0.5 * dt);
       this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 0.8 * dt);
     }
-    // Slope resistance/assist along travel direction.
-    this.speed -= 13 * _v1.y * dt;
+    // Slope resistance/assist along travel direction (full gravity: what
+    // momentum buys on a steep face, gravity takes back honestly).
+    this.speed -= G * _v1.y * dt;
+    // Near-wall scrub: beyond ~40 deg the tyres shear out and momentum
+    // dies fast — a full-speed rush clears at most a ~3 m step, never a
+    // 10 m face. (Sustained climbing already caps near 33 deg via grip.)
+    if (climb > 0.65) this.speed -= this.speed * Math.min(1, (climb - 0.65) * 18 * dt);
     this.speed = Math.max(MAX_REVERSE, Math.min(MAX_SPEED, this.speed));
 
     // Steering: fades in with speed, tightens down at high speed.
@@ -203,6 +213,7 @@ export class Bike {
   }
 
   _airStep(dt, throttle, brake) {
+    const prevX = this.position.x, prevZ = this.position.z, prevYair = this.position.y;
     this.velocity.y -= G * dt;
     this.position.addScaledVector(this.velocity, dt);
 
@@ -214,8 +225,21 @@ export class Bike {
     this.yaw -= this.steer * 0.8 * dt;
     this.roll += (this.steer * 0.35 - this.roll) * Math.min(1, 3 * dt);
 
-    const groundY = this.world.getHeight(this.position.x, this.position.z);
+    let groundY = this.world.getHeight(this.position.x, this.position.z);
     if (this.position.y <= groundY) {
+      // Landing or lateral wall impact? If the ground here towers over both
+      // our previous height and the previous column's ground, we flew INTO
+      // a face — stop at it and keep falling instead of snapping on top.
+      const groundPrev = this.world.getHeight(prevX, prevZ);
+      const allow = Math.hypot(this.velocity.x, this.velocity.z) * dt * MAX_GROUND_SLOPE + 0.5;
+      if (groundY - groundPrev > allow && groundY - prevYair > allow) {
+        this.position.x = prevX;
+        this.position.z = prevZ;
+        this.velocity.x *= -0.15; // soft bounce off the face
+        this.velocity.z *= -0.15;
+        groundY = groundPrev;
+        if (this.position.y > groundY) return; // still airborne, sliding down the face
+      }
       this.position.y = groundY;
       this.grounded = true;
 

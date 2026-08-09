@@ -569,7 +569,7 @@ function check(name, ok, detail = '') {
   });
   await sleep(800);
   const yTop = (await state()).pos[1];
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; i < 190; i++) { // crown rollers can climb briefly before the drop
     await sleep(120);
     const st = await page.evaluate(() => {
       const g = window.__game, A = window.__auto;
