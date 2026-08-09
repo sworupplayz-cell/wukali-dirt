@@ -22,6 +22,11 @@ export class FollowCamera {
     this._initialized = false;
   }
 
+  /** Current first-person blend (0 = fully third person). */
+  get blend() {
+    return this._blend;
+  }
+
   /** Switch POV; returns the new mode. Transition is eased in update(). */
   toggle() {
     this.mode = this.mode === 'third' ? 'first' : 'third';

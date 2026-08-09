@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
  * BikeModel — a low-poly dirt bike built entirely from primitives
@@ -99,6 +100,15 @@ export class BikeModel {
     this.frontWheel.position.set(0, -0.63, 0.045);
     steer.add(this.frontWheel);
 
+    // Nepali rider: one merged vertex-colored mesh (single draw call),
+    // parented to the chassis so position/lean/suspension/jumps are all
+    // inherited. Hidden in first person (see setRiderVisible).
+    this.rider = new THREE.Mesh(
+      buildRiderGeometry(),
+      new THREE.MeshLambertMaterial({ vertexColors: true })
+    );
+    chassis.add(this.rider);
+
     // Blob shadow (cheap replacement for shadow maps).
     this.shadow = this._makeBlobShadow();
 
@@ -140,6 +150,11 @@ export class BikeModel {
     return mesh; // oriented to the terrain normal every frame in sync()
   }
 
+  /** First person hides the rider so the camera never sits inside him. */
+  setRiderVisible(v) {
+    this.rider.visible = v;
+  }
+
   /** Copy physics state onto the visual hierarchy. */
   sync(bike, groundY, groundNormal) {
     this.group.position.copy(bike.position);
@@ -165,3 +180,53 @@ export class BikeModel {
 }
 
 const _planeUp = new THREE.Vector3(0, 0, 1); // PlaneGeometry faces +Z
+
+/**
+ * Low-poly rider in a fictional Nepali-inspired outfit: cream daura shirt
+ * and suruwal trousers, charcoal vest, Dhaka-style topi (cream with a rust
+ * band), seated riding pose reaching the handlebars. ~200 triangles, all
+ * in one merged vertex-colored geometry.
+ */
+function buildRiderGeometry() {
+  const parts = [];
+  const add = (geo, r, g, b, tf) => {
+    const n = geo.attributes.position.count;
+    const c = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { c[i * 3] = r; c[i * 3 + 1] = g; c[i * 3 + 2] = b; }
+    geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    geo.deleteAttribute('uv');
+    if (tf) tf(geo);
+    parts.push(geo);
+  };
+  const CREAM = [0.88, 0.84, 0.72], VEST = [0.23, 0.21, 0.26];
+  const SKIN = [0.72, 0.55, 0.40], DARK = [0.16, 0.14, 0.13], RUST = [0.62, 0.26, 0.20];
+
+  // Pelvis on the seat, torso leaning toward the bars.
+  add(new THREE.BoxGeometry(0.27, 0.18, 0.3), ...CREAM, (g) => g.translate(0, 0.98, -0.3));
+  add(new THREE.BoxGeometry(0.34, 0.48, 0.24), ...VEST, (g) => g.rotateX(0.3).translate(0, 1.27, -0.17));
+  add(new THREE.BoxGeometry(0.36, 0.1, 0.26), ...CREAM, (g) => g.rotateX(0.3).translate(0, 1.05, -0.24)); // daura hem
+  // Neck + head + Dhaka topi.
+  add(new THREE.BoxGeometry(0.09, 0.09, 0.09), ...SKIN, (g) => g.translate(0, 1.52, -0.1));
+  add(new THREE.BoxGeometry(0.18, 0.2, 0.19), ...SKIN, (g) => g.translate(0, 1.66, -0.08));
+  add(new THREE.CylinderGeometry(0.105, 0.118, 0.06, 8), ...RUST, (g) => g.rotateX(-0.12).translate(0, 1.79, -0.09));
+  add(new THREE.CylinderGeometry(0.082, 0.104, 0.09, 8), ...CREAM, (g) => g.rotateX(-0.12).translate(0, 1.86, -0.1));
+  // Arms reaching the handlebars (cream daura sleeves, skin hands).
+  for (const sx of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.09, 0.3, 0.1), ...VEST,
+      (g) => g.rotateX(0.9).rotateZ(sx * -0.22).translate(sx * 0.21, 1.33, 0.02));
+    add(new THREE.BoxGeometry(0.08, 0.3, 0.08), ...CREAM,
+      (g) => g.rotateX(1.15).rotateZ(sx * -0.12).translate(sx * 0.27, 1.16, 0.24));
+    add(new THREE.BoxGeometry(0.07, 0.09, 0.1), ...SKIN, (g) => g.translate(sx * 0.3, 1.08, 0.37));
+    // Suruwal thighs + shins, shoes on the pegs.
+    add(new THREE.BoxGeometry(0.12, 0.36, 0.14), ...CREAM,
+      (g) => g.rotateX(1.25).rotateZ(sx * -0.15).translate(sx * 0.13, 0.87, -0.1));
+    add(new THREE.BoxGeometry(0.1, 0.34, 0.11), ...CREAM,
+      (g) => g.rotateX(0.25).translate(sx * 0.2, 0.58, 0.02));
+    add(new THREE.BoxGeometry(0.09, 0.08, 0.22), ...DARK, (g) => g.translate(sx * 0.2, 0.38, 0.0));
+  }
+  const flat = parts.map((p) => (p.index ? p.toNonIndexed() : p));
+  const merged = mergeGeometries(flat);
+  parts.forEach((p) => p.dispose());
+  flat.forEach((p) => p.dispose());
+  return merged;
+}

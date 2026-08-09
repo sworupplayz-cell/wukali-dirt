@@ -149,6 +149,9 @@ export class Game {
   }
 
   _syncModel() {
+    // Rider rides in third person; hidden once the POV blend passes helmet
+    // distance so the camera never clips through him.
+    this.bikeModel.setRiderVisible(this.followCam.blend < 0.45);
     const p = this.bike.position;
     this.bikeModel.sync(
       this.bike,
