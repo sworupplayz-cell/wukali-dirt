@@ -34,7 +34,7 @@ import { vnoise, fbm2, hash01, hashInt, mulberry32, sstep } from './noise.js';
 
 const CELL = 80; // feature-cell size (m)
 const MCELL = 1200;           // mountain-destination cell size (m)
-const ROAD_END_R = 16;        // spiral road ends this close to the summit
+const ROAD_END_R = 10;        // spiral road ends this close to the summit
 const REGISTRY_SIZE = 16;     // named destinations curated around the origin
 const SIGNATURE_COUNT = 6;
 const MOUNTAIN_NAMES = [
@@ -59,25 +59,31 @@ const SIG_PARAMS = [
   { // 1 Shreya Shikhar: forest approach, long climb, bridge, narrow ridge top
     H: 128, R: 360, turns: 3.1, roadW: 3.2, narrowTop: 0.36, crown: 10,
     bridges: [0.55], forestMul: 1.35,
+    alt: { turns: 1.1, w: 2.4, narrowTop: 0.3 }, spur: { bearingOff: 2.4, w: 3.4 },
   },
   { // 2 Aakash Chuli: open, fast, wide flowing road with big whoop jumps
     H: 105, R: 340, turns: 2.4, roadW: 6.5, crown: 0,
     whoopAmp: 1.7, whoopFreq: 45, forestMul: 0.25, // ~20-35 m kicker wavelength
+    alt: { turns: 1.0, w: 4.5 },
   },
   { // 3 Rajkanya Himal: steep technical rock, tight switchbacks, narrow road
     H: 118, R: 330, turns: 3.6, roadW: 2.9, crown: 8, rockBig: true, forestMul: 0.45,
+    alt: { turns: 1.3, w: 2.6 }, spur: { bearingOff: 3.4, w: 3.0 },
   },
   { // 4 Basanta Shikhar: deep forest, streams run down the dome, two bridges
     H: 100, R: 350, turns: 2.9, roadW: 4.2, crown: 4,
     bridges: [0.35, 0.62], streamKeep: true, mud: true, forestMul: 1.5,
+    alt: { turns: 1.2, w: 3.4 },
   },
   { // 5 Ganga Devi Peak: terraced village lower slopes, forest, exposed top
     H: 110, R: 360, turns: 2.8, roadW: 4.6, crown: 6,
     terraceLow: true, village: true, forestMul: 0.9,
+    alt: { turns: 1.15, w: 3.2 },
   },
   { // 6 Mukti Himal: the hardest — highest, narrow, uneven, brutal final climb
     H: 148, R: 380, turns: 3.4, roadW: 2.7, narrowTop: 0.3, crown: 14,
     whoopAmp: 0.55, whoopFreq: 55, barren: true, forestMul: 0.1, // uneven chatter
+    alt: { turns: 1.4, w: 2.3, narrowTop: 0.25 },
   },
 ];
 
@@ -103,6 +109,7 @@ export class TerrainGenerator {
     this._mtnD = 0; // distance to the mountain returned by _mountainNear
     this._registryMeta = null; // cell key -> destination metadata (never pruned)
     this._registryList = null;
+    this._roadCut = { dr: 1e9, w: 3.6, fade: 0 }; // scratch: nearest route band
     this._info = makeInfo(); // scratch for height-only sampling
   }
 
@@ -277,6 +284,7 @@ export class TerrainGenerator {
         const meta = this._registryMeta.get(key);
         if (meta) Object.assign(mn, meta);
       }
+      if (mn && mn.signature && !mn.altRoutes) mn.altRoutes = buildAltRoutes(mn);
       this._mcells.set(key, mn);
     }
     return mn;
@@ -346,7 +354,9 @@ export class TerrainGenerator {
       if (signature) sigIdx++;
       meta.registryIndex = i;
       this._registryMeta.set(c.key, meta);
-      Object.assign(this._mcells.get(c.key), meta);
+      const rec = this._mcells.get(c.key);
+      Object.assign(rec, meta);
+      if (rec.signature && !rec.altRoutes) rec.altRoutes = buildAltRoutes(rec);
     });
 
     // Second pass (all overrides active): road bridges + public entries.
@@ -398,7 +408,18 @@ export class TerrainGenerator {
       streamKeep: !!p.streamKeep, terraceLow: !!p.terraceLow,
       village: !!p.village, mud: !!p.mud, rockBig: !!p.rockBig,
       barren: !!p.barren, forestMul: p.forestMul !== undefined ? p.forestMul : 1,
+      alt: p.alt || null, spur: p.spur || null,
     };
+  }
+
+  /** Dome profile (0..1) of any mountain at a point; 0 = off-dome. */
+  _domeProf(x, z) {
+    const mn = this._mountainNear(x, z);
+    if (!mn) return 0;
+    const t = this._mtnD / mn.R;
+    if (t >= 1) return 0;
+    const q = 1 - t * t;
+    return q * q;
   }
 
   /** Mountain whose influence covers (x,z), or null; distance in _mtnD. */
@@ -443,20 +464,32 @@ export class TerrainGenerator {
     return best;
   }
 
-  /** Point + uphill heading on a mountain's road; frac 0 = base, 1 = summit. */
-  roadPoint(mn, frac) {
+  /**
+   * Point + uphill heading on a mountain route; frac 0 = base, 1 = summit.
+   * routeIdx 0 = main spiral; 1+ index into altRoutes (signatures).
+   */
+  roadPoint(mn, frac, routeIdx = 0) {
+    const pos = (f) => this._routePos(mn, f, routeIdx);
+    const p0 = pos(frac), p1 = pos(Math.min(1.02, frac + 0.004));
+    return { x: p0.x, z: p0.z, yaw: Math.atan2(p1.x - p0.x, p1.z - p0.z) };
+  }
+
+  _routePos(mn, frac, routeIdx) {
+    if (routeIdx > 0 && mn.altRoutes && mn.altRoutes[routeIdx - 1]) {
+      const rt = mn.altRoutes[routeIdx - 1];
+      if (rt.type === 'spur') {
+        const d = (mn.R + 28) * (1 - frac) + 18 * frac;
+        return { x: mn.x + Math.cos(rt.phi) * d, z: mn.z + Math.sin(rt.phi) * d };
+      }
+      const u = frac * rt.uMax;
+      const r = rt.rStart - rt.k * u;
+      const a = rt.phi + rt.dir * u;
+      return { x: mn.x + Math.cos(a) * r, z: mn.z + Math.sin(a) * r };
+    }
     const u = frac * mn.uMax;
     const r = mn.rStart - mn.k * u;
     const a = mn.phi + u;
-    const cos = Math.cos(a), sin = Math.sin(a);
-    // Tangent for increasing u (uphill).
-    const dx = -mn.k * cos - r * sin;
-    const dz = -mn.k * sin + r * cos;
-    return {
-      x: mn.x + cos * r,
-      z: mn.z + sin * r,
-      yaw: Math.atan2(dx, dz),
-    };
+    return { x: mn.x + Math.cos(a) * r, z: mn.z + Math.sin(a) * r };
   }
 
   /** Drop far-away cached cells; called occasionally to bound memory. */
@@ -492,6 +525,8 @@ export class TerrainGenerator {
     const mtnD = this._mtnD;
     let mProf = 0, mMod = 1, mCore = 0;
     let roadMask = 0, roadDelta = 0, modBlend = 0;
+    const roadCut = this._roadCut;
+    roadCut.dr = 1e9; roadCut.w = 3.6; roadCut.fade = 0;
     if (mtn) {
       const t = mtnD / mtn.R;
       if (t < 1) {
@@ -499,35 +534,100 @@ export class TerrainGenerator {
         mProf = q * q;
       }
       mMod = 0.85 + 0.34 * vnoise(x * 0.0045 + 3.3, z * 0.0045 - 7.7, this.SMt + 8);
+      // The summit cap uses the per-mountain constant modulation: near the
+      // center, arc lengths shrink toward zero, so any winding-gated blend
+      // there would concentrate tens of metres of bench shift into a
+      // couple of metres of arc (a cliff). A radial blend makes the cap
+      // rotationally uniform and the bench math a no-op where it matters.
+      if (mtn.modC !== undefined) mMod += (mtn.modC - mMod) * sstep(80, 25, mtnD);
       mCore = sstep(0.02, 0.22, mProf);
 
       // Spiral road: nearest winding at this angle. The narrow band cancels
       // the dome's radial slope; a wider shoulder blends the flank shape-
       // modulation toward a per-mountain constant so the road itself climbs
       // steadily (bench-cut look on strong flanks).
-      let u = Math.atan2(z - mtn.z, x - mtn.x) - mtn.phi;
-      u -= Math.floor(u / (2 * Math.PI)) * 2 * Math.PI; // 0..2π
-      let bestDr = Infinity, bestRk = 0, bestU = 0;
-      for (; u <= mtn.uMax; u += 2 * Math.PI) {
-        const rk = mtn.rStart - mtn.k * u;
-        const dr = Math.abs(mtnD - rk);
-        if (dr < bestDr) { bestDr = dr; bestRk = rk; bestU = u; }
+      const ang = Math.atan2(z - mtn.z, x - mtn.x);
+      // Bench shoulder width scales with the modulation delta so the cut
+      // beside the road can never exceed ~30 deg.
+      const benchW = 26 + Math.min(70, Math.abs(mtn.modC - mMod) * mtn.H * mProf * 1.6);
+      // Route contributions are mask-weight blended (never hard-switched):
+      // crossings become junction saddles, and every winding fades out at
+      // the spiral's start/end (a terminating band used to leave a sheer
+      // angular wall of bench offset — the "invisible wall" pop-up bug).
+      let wSum = 0, dSum = 0;
+      const spiralBand = (phi, dir, rStart, k, uMax, wIn) => {
+        let ub = dir * (ang - phi);
+        ub -= Math.floor(ub / (2 * Math.PI)) * 2 * Math.PI;
+        let mask = 0, delta = 0, bench = 0, bu = 0, drB = 1e9, fadeB = 0;
+        // Enumerate windings PAST uMax as virtual continuations: the
+        // candidate set is then continuous across the wrap bearing, and the
+        // route dissolves by winding RADIUS (angular end-fades concentrated
+        // a 40 m bench shift into ~10 m of arc near the summit — the last
+        // remaining terrain wall).
+        for (; rStart - k * ub > -benchW; ub += 2 * Math.PI) {
+          const rk = rStart - k * ub;
+          const dr = Math.abs(mtnD - rk);
+          if (dr > benchW) continue;
+          const fade = sstep(0, 0.5, ub) * sstep(1.5, 6, rk);
+          const m2 = sstep(wIn + 2.6, wIn, dr) * fade;
+          const b2 = sstep(benchW, 7, dr) * fade;
+          if (b2 > bench) bench = b2;
+          if (fade > 0.02 && dr < drB) { drB = dr; fadeB = fade; }
+          if (m2 > mask) {
+            mask = m2;
+            bu = ub;
+            const tk = rk / mtn.R;
+            const qk = tk < 1 ? 1 - tk * tk : 0;
+            delta = (qk * qk - mProf) * mtn.H;
+            if (mtn.crown) {
+              delta += mtn.crown * (sstep(0.72, 0.98, qk * qk) - sstep(0.72, 0.98, mProf));
+            }
+          }
+        }
+        return { mask, delta, bench, bu, drB, fadeB, wIn };
+      };
+
+      const wMain = (mtn.roadW || 3.6) * (1 - (mtn.narrowTop || 0) * mProf);
+      const main = spiralBand(mtn.phi, 1, mtn.rStart, mtn.k, mtn.uMax, wMain);
+      roadCut.dr = main.drB; roadCut.w = main.wIn; roadCut.fade = main.fadeB;
+      if (mtn.whoopAmp && main.mask > 0) {
+        const w2 = Math.max(0, Math.sin(main.bu * mtn.whoopFreq));
+        main.delta += mtn.whoopAmp * w2 * w2 * w2 * sstep(0.92, 0.7, mProf);
       }
-      if (bestDr < 26) {
-        // Signature roads set their own width; some narrow with altitude
-        // ("dangerous ridge" feel — narrower bench, closer edges).
-        const wIn = (mtn.roadW || 3.6) * (1 - (mtn.narrowTop || 0) * mProf);
-        roadMask = sstep(wIn + 2.6, wIn, bestDr);
-        modBlend = sstep(26, 7, bestDr);
-        const tk = bestRk / mtn.R;
-        const qk = tk < 1 ? 1 - tk * tk : 0;
-        roadDelta = (qk * qk - mProf) * mtn.H;
-        // Whoop rollers along the road (natural jump kickers / uneven track).
-        if (mtn.whoopAmp) {
-          const w2 = Math.max(0, Math.sin(bestU * mtn.whoopFreq));
-          roadDelta += mtn.whoopAmp * w2 * w2 * w2 * sstep(0.92, 0.7, mProf);
+      roadMask = main.mask;
+      modBlend = main.bench;
+      wSum += main.mask * main.mask;
+      dSum += main.delta * main.mask * main.mask;
+
+      if (mtn.altRoutes) {
+        for (let ri = 0; ri < mtn.altRoutes.length; ri++) {
+          const rt = mtn.altRoutes[ri];
+          if (rt.type === 'spiral') {
+            const alt = spiralBand(rt.phi, rt.dir, rt.rStart, rt.k, rt.uMax,
+              rt.w * (1 - (rt.narrowTop || 0) * mProf));
+            if (alt.drB - alt.wIn < roadCut.dr - roadCut.w) {
+              roadCut.dr = alt.drB; roadCut.w = alt.wIn; roadCut.fade = alt.fadeB;
+            }
+            if (alt.mask > roadMask) roadMask = alt.mask;
+            if (alt.bench > modBlend) modBlend = alt.bench;
+            wSum += alt.mask * alt.mask;
+            dSum += alt.delta * alt.mask * alt.mask;
+          } else { // radial spur: rides the dome's own slope (the hard way up)
+            let da = ang - rt.phi;
+            da = Math.atan2(Math.sin(da), Math.cos(da));
+            const arc = Math.abs(da) * mtnD;
+            const gate = sstep(mtn.R + 50, mtn.R + 15, mtnD) * sstep(10, 20, mtnD);
+            const mask = sstep(rt.w + 2.6, rt.w, arc) * gate;
+            if (gate > 0.02 && arc - rt.w < roadCut.dr - roadCut.w) {
+              roadCut.dr = arc; roadCut.w = rt.w; roadCut.fade = gate;
+            }
+            if (mask > roadMask) roadMask = mask;
+            wSum += mask * mask; // delta 0: contributes toward no-op flatten
+            if (arc < benchW) modBlend = Math.max(modBlend, sstep(benchW, 7, arc) * gate);
+          }
         }
       }
+      if (wSum > 1e-5) roadDelta = dSum / wSum;
       if (modBlend > 0) mMod += (mtn.modC - mMod) * modBlend;
     }
 
@@ -603,15 +703,24 @@ export class TerrainGenerator {
     // and off the dome (the dome's own slope is cancelled separately below);
     // on the dome it references the smoothest single-octave base so the
     // climb never inherits base bumps as sudden pitch changes.
-    const flattenM = Math.max(trailM, roadMask);
     const hRef = (hGentle + (hSmooth - hGentle) * mCore) * 0.92;
-    h += (hRef - h) * flattenM * 0.85;
+    const pull = (hRef - h) * 0.85;
+    let roadFlat = 0;
+    if (roadCut.dr < 80) {
+      // Widen the cut's falloff with its depth: deep cuts get long, gentle
+      // banks instead of 2.6 m trench walls.
+      const widen = Math.min(36, Math.abs(pull) * 2.2);
+      roadFlat = sstep(roadCut.w + 2.6 + widen, roadCut.w, roadCut.dr) * roadCut.fade;
+    }
+    const flattenM = Math.max(trailM, roadFlat);
+    h += pull * flattenM;
 
     // Mountain dome + rideable spiral road.
     if (mtn) {
       h += mtn.H * mProf * mMod;
-      // Summit crown: an extra uncancelled cone — the final ascent steepens
-      // and the peak reads bigger (signature "dramatic finish").
+      // Summit crown: an extra cone — the final ascent steepens and the
+      // peak reads bigger (the road band cancels its cross-slope like the
+      // dome's, so the last stretch is steep but never a wall).
       if (mtn.crown) h += mtn.crown * sstep(0.72, 0.98, mProf);
       if (roadMask > 0) {
         h += roadDelta * mMod * roadMask;
@@ -700,7 +809,7 @@ export class TerrainGenerator {
           const bx = (cx + (gi + 0.5) / 5) * CELL;
           const bz = (cz + (gj + 0.5) / 5) * CELL;
           this._sample(bx, bz, info, false, true);
-          if (info.trail > 0.5 && info.stream > 0.62) {
+          if (info.trail > 0.5 && info.stream > 0.62 && this._domeProf(bx, bz) < 0.03) {
             const d = this._trailDir(bx, bz);
             const h0 = this._sample(bx, bz, null, false, false) + 0.12; // bank height (no carve)
             return { type: 'bridge', x: bx, z: bz, dx: d.x, dz: d.z, h0 };
@@ -712,7 +821,7 @@ export class TerrainGenerator {
     if (r0 < 0.05) {
       // Built kicker ramp: only on trails, gentle ground, with a safe landing.
       this._sample(px, pz, info, false, true);
-      if (info.trail > 0.45 && info.lo > 0.35) {
+      if (info.trail > 0.45 && info.lo > 0.35 && this._domeProf(px, pz) < 0.03) {
         const d = this._trailDir(px, pz);
         if (hash01(cx, cz, this.SF + 3) < 0.5) { d.x = -d.x; d.z = -d.z; }
         const h0 = this._sample(px, pz, null, false, true);
@@ -726,7 +835,7 @@ export class TerrainGenerator {
     if (r0 < 0.30) {
       // Natural dirt mound (jumpable from both sides).
       this._sample(px, pz, info, false, true);
-      if (info.lo > 0.3 && info.stream < 0.1) {
+      if (info.lo > 0.3 && info.stream < 0.1 && this._domeProf(px, pz) < 0.03) {
         const ang = hash01(cx, cz, this.SF + 4) * Math.PI * 2;
         return { type: 'mound', x: px, z: pz, dx: Math.sin(ang), dz: Math.cos(ang), h0: 0 };
       }
@@ -755,6 +864,27 @@ const FARM_PALETTE = [
   [0.36, 0.48, 0.20],
   [0.58, 0.53, 0.24],
 ];
+
+/** Materialize alternate route definitions from signature specs. */
+function buildAltRoutes(mn) {
+  const routes = [];
+  if (mn.alt) {
+    const uMax = mn.alt.turns * 2 * Math.PI;
+    routes.push({
+      type: 'spiral', dir: -1,
+      phi: mn.phi + 2.1,
+      rStart: mn.rStart,
+      k: (mn.rStart - ROAD_END_R) / uMax,
+      uMax,
+      w: mn.alt.w,
+      narrowTop: mn.alt.narrowTop || 0,
+    });
+  }
+  if (mn.spur) {
+    routes.push({ type: 'spur', phi: mn.phi + mn.spur.bearingOff, w: mn.spur.w });
+  }
+  return routes;
+}
 
 export function makeInfo() {
   return {

@@ -115,8 +115,8 @@ export class WorldManager {
   }
 
   /** Point + uphill heading on a mountain road (tests/debug). */
-  roadPoint(mountain, frac) {
-    return this.generator.roadPoint(mountain, frac);
+  roadPoint(mountain, frac, routeIdx = 0) {
+    return this.generator.roadPoint(mountain, frac, routeIdx);
   }
 
   // ---- Streaming -----------------------------------------------------------

@@ -17,6 +17,7 @@ const ACCEL = 11;
 const BRAKE_DECEL = 17;
 const REVERSE_ACCEL = 4.5;
 const WHEELBASE = 1.35;
+const MAX_GROUND_SLOPE = 1.0;  // steepest rise (45°) ground-following may climb
 const CRASH_LAND_VY = -12.0;  // downward speed + bad pitch => crash
 const CRASH_LAND_PITCH = 0.9;
 const CRASH_HIT_SPEED = 10;   // head-on prop hit above this => crash
@@ -178,8 +179,20 @@ export class Bike {
       this.position.y = prevY + vy * dt;
     } else {
       const rise = groundY - prevY;
-      this.position.y = groundY;
-      this._suspVel += THREE.MathUtils.clamp(rise * 6 - vy * 0.15, -3, 3) * dt * 12;
+      const horiz = Math.abs(this.speed) * dt + 1e-6;
+      if (rise > horiz * MAX_GROUND_SLOPE + 0.03) {
+        // The terrain rises faster than any wheel could follow: that's a
+        // wall, not a slope. Stay below the face and thud off it instead
+        // of snapping upward onto higher ground.
+        this.position.x -= _v1.x * this.speed * dt;
+        this.position.z -= _v1.z * this.speed * dt;
+        this.position.y = this.world.getHeight(this.position.x, this.position.z);
+        this.speed *= 0.2;
+        this._suspVel -= 2;
+      } else {
+        this.position.y = groundY;
+        this._suspVel += THREE.MathUtils.clamp(rise * 6 - vy * 0.15, -3, 3) * dt * 12;
+      }
     }
 
     // Lean into turns.

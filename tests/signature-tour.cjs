@@ -41,19 +41,27 @@ function check(name, ok, detail = '') {
       .map((m) => ({ id: m.id, name: m.name, kind: 0, x: m.x, z: m.z, H: m.H })));
   check('Six signature destinations', sigs.length === 6, sigs.map((s) => s.name).join(', '));
 
-  let summitsBefore = 0;
+  const rides = [];
   for (const sig of sigs) {
-    const startFrac = sig.name === 'Shreya Shikhar' ? 0.35 : 0.55;
-    await page.evaluate(([mx, mz, f]) => {
+    rides.push({ sig, ri: 0 });
+    if (sig.name === 'Shreya Shikhar') {
+      rides.push({ sig, ri: 1 }); // counter-spiral ridge route
+      rides.push({ sig, ri: 2 }); // radial rocky spur
+    }
+  }
+  let summitsBefore = 0;
+  for (const { sig, ri } of rides) {
+    const startFrac = ri === 2 ? 0.05 : ri === 1 ? 0.3 : sig.name === 'Shreya Shikhar' ? 0.35 : 0.55;
+    await page.evaluate(([mx, mz, f, ri2]) => {
       const g = window.__game;
       g.restart();
       const rec = g.world.nearestMountain(mx, mz);
-      window.__auto = { m: rec, frac: f, air: false, scored0: g.stunts.score };
-      const p = g.world.roadPoint(rec, f);
+      window.__auto = { m: rec, frac: f, ri: ri2, air: false, scored0: g.stunts.score };
+      const p = g.world.roadPoint(rec, f, ri2);
       g.bike._placeAt(p.x, g.world.getHeight(p.x, p.z), p.z, p.yaw);
       g.followCam.snapTo(g.bike);
       g.input.update = () => {};
-    }, [sig.x, sig.z, startFrac]);
+    }, [sig.x, sig.z, startFrac, ri]);
     await sleep(2200);
 
     let reached = false, crashes = 0, banner = '', midShot = false;
@@ -62,17 +70,18 @@ function check(name, ok, detail = '') {
       const st = await page.evaluate(() => {
         const g = window.__game, A = window.__auto;
         if (g.state === 'crashed') return { crashed: true };
-        let p = g.world.roadPoint(A.m, A.frac);
+        let p = g.world.roadPoint(A.m, A.frac, A.ri);
         const b = g.bike.position;
         while (Math.hypot(p.x - b.x, p.z - b.z) < 14 && A.frac < 1.02) {
-          A.frac += 0.005;
-          p = g.world.roadPoint(A.m, A.frac);
+          A.frac += A.ri === 2 ? 0.02 : 0.005;
+          p = g.world.roadPoint(A.m, A.frac, A.ri);
         }
         const ty = Math.atan2(p.x - b.x, p.z - b.z);
         let d = ty - g.bike.yaw;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         g.input.steer = Math.max(-1, Math.min(1, -d * 2.2));
-        g.input.throttle = Math.abs(d) > 1.3 ? 0.35 : (A.m.kind === 2 ? 1 : 0.85);
+        g.input.throttle = Math.abs(d) > 1.3 && g.bike.speed > 4 ? 0
+          : (A.m.kind === 2 || A.ri === 2 ? 1 : 0.85);
         if (!g.bike.grounded) A.air = true;
         return {
           crashed: false, frac: A.frac,
@@ -88,8 +97,8 @@ function check(name, ok, detail = '') {
         await page.evaluate(() => {
           const g = window.__game, A = window.__auto;
           g.restart();
-          A.frac = Math.max(0.3, A.frac - 0.04);
-          const p = g.world.roadPoint(A.m, A.frac);
+          A.frac = Math.max(0.05, A.frac - 0.04);
+          const p = g.world.roadPoint(A.m, A.frac, A.ri);
           g.bike._placeAt(p.x, g.world.getHeight(p.x, p.z), p.z, p.yaw);
           g.followCam.snapTo(g.bike);
           g.input.update = () => {};
@@ -100,17 +109,19 @@ function check(name, ok, detail = '') {
         midShot = true;
         await page.screenshot({ path: `/tmp/sig-${sig.name.replace(/ /g, '_')}-mid.png` });
       }
-      if (st.summits > summitsBefore) {
+      if (ri === 0 ? st.summits > summitsBefore : st.dist < 18) {
         reached = true;
         banner = st.banner;
-        await page.screenshot({ path: `/tmp/sig-${sig.name.replace(/ /g, '_')}-summit.png` });
+        await page.screenshot({ path: `/tmp/sig-${sig.name.replace(/ /g, '_')}-r${ri}-summit.png` });
       }
     }
     summitsBefore = await page.evaluate(() => window.__game.achievements.summitCount);
-    check(`${sig.name}: summit reached by riding its road`, reached,
+    const label = ri === 0 ? 'main road' : ri === 1 ? 'alternate route' : 'spur shortcut';
+    check(`${sig.name} [${label}]: summit reached by riding`, reached,
       `crashes on the way: ${crashes}`);
-    check(`${sig.name}: banner shows its name`, banner === sig.name, banner);
+    if (ri === 0) check(`${sig.name}: banner shows its name`, banner === sig.name, banner);
 
+    if (ri !== 0) continue; // descents/jump checks only for main-road rides
     const extra = await page.evaluate(() => ({
       air: window.__auto.air,
       scored: window.__game.stunts.score - window.__auto.scored0,
