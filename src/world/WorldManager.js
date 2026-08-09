@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TerrainGenerator, makeInfo } from './TerrainGenerator.js';
+import { sstep } from './noise.js';
 import { ChunkManager, CHUNK_SIZE } from './ChunkManager.js';
 import { Mountains } from './Mountains.js';
 import { MountainImpostors } from './MountainImpostors.js';
@@ -24,6 +25,7 @@ export class WorldManager {
     this._n = new THREE.Vector3();
     this._spawn = null;
     this._pruneT = 0;
+    this._surfInfo = makeInfo(); // reused scratch for getSurface (no allocs)
   }
 
   // ---- Interface used by Bike / FollowCamera / Game -----------------------
@@ -42,6 +44,58 @@ export class WorldManager {
 
   getColliders() {
     return this.chunks.activeColliders;
+  }
+
+  /**
+   * Surface material under a point (Phase 3H). Classifies the analytic
+   * terrain masks the generator already computes into a tiny record the
+   * bike physics reads each few steps:
+   *   grip  — drive/brake traction multiplier (1 = groomed dirt road)
+   *   drag  — rolling-resistance coefficient (1/s, scales with speed)
+   *   rough — bump excitation for the suspension & handling (0..1)
+   * One extra analytic mask sample per call; no allocations, no raycasts,
+   * no physics bodies — the terrain stays a pure heightfield.
+   */
+  getSurface(x, z, out) {
+    const i = this._surfInfo;
+    this.generator.masksAt(x, z, i);
+
+    // Off-road base: soft dirt/grass (hills, farms, forest floor) vs bare
+    // rock (rocky biome, high mountain biome, and the exposed mid/upper
+    // band of destination domes).
+    const rock = Math.min(1, i.wRk + i.wMnt + sstep(0.35, 0.62, i.mtn));
+    const soft = 1 - rock;
+    const forest = Math.min(1, i.wF * 1.4);
+    let grip = 0.93 * soft + 0.85 * rock;
+    let drag = (0.07 + 0.04 * forest) * soft + 0.085 * rock;
+    let rough = (0.30 + 0.16 * forest) * soft + 0.75 * rock;
+
+    // Groomed road/trail overrides the ground it crosses: predictable
+    // traction, free rolling, near-smooth. (Kind-4 signature mountains
+    // keep their forest roads muddy — slightly slick and soft.)
+    const road = sstep(0.35, 0.75, i.trail);
+    grip += (1.0 - grip) * road;
+    drag += (0.012 - drag) * road;
+    rough += (0.07 - rough) * road;
+    if (i.mtnKind === 4 && i.mtn > 0.02 && road > 0.1) {
+      const m = road;
+      grip = Math.min(grip, 1 - 0.12 * m);
+      drag = Math.max(drag, 0.05 * m);
+      rough = Math.max(rough, 0.2 * m);
+    }
+
+    // Stream beds: wet stones — slick and draggy in the watery center.
+    const wet = i.stream;
+    if (wet > 0.03) {
+      grip += (0.68 - grip) * wet;
+      drag += (0.5 - drag) * wet * wet;
+      rough += (0.55 - rough) * wet * (1 - wet * 0.5);
+    }
+
+    out.grip = grip;
+    out.drag = drag;
+    out.rough = rough;
+    return out;
   }
 
   /** Deterministic spawn: nearest gentle trail point to the origin. */

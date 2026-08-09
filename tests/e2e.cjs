@@ -159,7 +159,7 @@ function check(name, ok, detail = '') {
       maxInstances = Math.max(maxInstances, s.debug.instances);
       maxColliders = Math.max(maxColliders, s.debug.colliders);
       maxChunks = Math.max(maxChunks, s.debug.chunks);
-      if (Math.abs(s.speed) > 27 || Number.isNaN(s.pos[0]) ||
+      if (Math.abs(s.speed) > 35 || Number.isNaN(s.pos[0]) ||
           (s.grounded && Math.abs(s.pos[1] - s.groundH) > 1.5)) worst = { leg: name, s };
       if (s.state === 'crashed') {
         crashes++;

@@ -11,7 +11,9 @@ import * as THREE from 'three';
  */
 
 const G = 18;                 // arcade gravity (m/s^2)
-const MAX_SPEED = 26;         // ~94 km/h
+const MAX_SPEED = 26;         // ~94 km/h — engine-limited top speed
+const MAX_DOWNHILL = 34;      // ~122 km/h — gravity may push past the engine cap
+const OVERSPEED_DRAG = 1.6;   // 1/s bleed above MAX_SPEED (smooth, no clamp snap)
 const MAX_REVERSE = -4.5;
 const ACCEL = 11;
 const BRAKE_DECEL = 17;
@@ -50,6 +52,11 @@ export class Bike {
     this.crashed = false;
     this.crashTimer = 0;
     this.wheelSpin = 0;
+    this.slipSpin = 0;       // extra rear-wheel spin when traction breaks (visual)
+    this.slip = 0;           // 0..1 rear-wheel slip fraction
+    this.surface = { grip: 1, drag: 0, rough: 0 }; // material under the wheels
+    this._surfTimer = 0;
+    this._bumpPhase = 0;
     this.suspension = 0;     // visual spring value
     this._suspVel = 0;
     this._safeTimer = 0;
@@ -89,6 +96,9 @@ export class Bike {
     this.suspension = 0;
     this._suspVel = 0;
     this._safeTimer = 0;
+    this.slip = 0;
+    this.surface.grip = 1; this.surface.drag = 0; this.surface.rough = 0;
+    this._surfTimer = 0;
     this.groundNormal.set(0, 1, 0);
     this._updateOrientation(1 / 60);
   }
@@ -110,6 +120,14 @@ export class Bike {
     // Smooth the steering input so touch taps don't snap the bike.
     this.steer += (steerIn - this.steer) * Math.min(1, 10 * dt);
 
+    // Refresh the surface material under the wheels at ~20 Hz (one cheap
+    // analytic mask sample — the bike's only extra terrain query).
+    this._surfTimer -= dt;
+    if (this._surfTimer <= 0 && world.getSurface) {
+      this._surfTimer = 0.05;
+      world.getSurface(this.position.x, this.position.z, this.surface);
+    }
+
     if (this.grounded) {
       this._groundStep(dt, throttle, brake);
     } else {
@@ -129,6 +147,7 @@ export class Bike {
     this._updateOrientation(dt);
 
     this.wheelSpin += (this.speed / 0.34) * dt;
+    this.slipSpin += this.slip * 55 * dt; // extra rear-wheel spin while traction breaks
     this.heightAboveGround = this.position.y - world.getHeight(this.position.x, this.position.z);
 
     // Out of the test area: snap back to safety (Phase 2 world removes this).
@@ -144,20 +163,34 @@ export class Bike {
     _v1.copy(this.forward).addScaledVector(n, -this.forward.dot(n)).normalize();
 
     // Speed: throttle tapers near max, brake reverses slowly, drag otherwise.
-    // Drive force is traction-limited: grip fades on steep faces, so walls
-    // can only be rushed on momentum — never powered up. Roads/moderate
-    // slopes (< ~30 deg) keep full grip.
+    // Drive force is traction-limited twice over: grip fades on steep faces
+    // (walls can only be rushed on momentum, never powered up) and loose
+    // surfaces — grass, rock, wet stream stones — put down less power than
+    // the groomed road. Roads/moderate slopes keep full grip.
     const climb = Math.max(0, _v1.y);
-    const grip = 1 - 0.75 * Math.min(1, Math.max(0, (climb - 0.55) / 0.3));
+    const slopeGrip = 1 - 0.75 * Math.min(1, Math.max(0, (climb - 0.55) / 0.3));
+    const grip = slopeGrip * this.surface.grip;
+    this.slip = 0;
     if (throttle > 0) {
-      this.speed += ACCEL * grip * (1 - Math.max(this.speed, 0) / MAX_SPEED) * throttle * dt;
+      this.speed += ACCEL * grip * Math.max(0, 1 - Math.max(this.speed, 0) / MAX_SPEED) * throttle * dt;
+      this.slip = throttle * (1 - Math.min(1, grip)); // rear wheel overspin (visual)
     } else if (brake > 0) {
-      if (this.speed > 0.3) this.speed -= BRAKE_DECEL * brake * dt;
+      // Braking bites a little softer on loose/wet ground.
+      const bite = 0.7 + 0.3 * this.surface.grip;
+      if (this.speed > 0.3) this.speed -= BRAKE_DECEL * bite * brake * dt;
       else this.speed = Math.max(this.speed - REVERSE_ACCEL * brake * dt, MAX_REVERSE);
     } else {
-      this.speed *= 1 - Math.min(1, 0.5 * dt);
+      // Coast: engine braking + rolling friction. The proportional decay
+      // fades out on real descents so gravity can pull the bike downhill
+      // naturally — flat-ground roll-out behaviour is unchanged.
+      const eb = 0.5 * (1 - Math.min(1, Math.max(0, -_v1.y) * 2.5));
+      this.speed *= 1 - Math.min(1, eb * dt);
       this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 0.8 * dt);
     }
+    // Rolling resistance of the surface itself (roads free-roll; grass,
+    // rocks and stream beds scrub speed — off-road shortcuts still work,
+    // they just can't hold road top speed).
+    this.speed -= this.surface.drag * this.speed * dt;
     // Slope resistance/assist along travel direction (full gravity: what
     // momentum buys on a steep face, gravity takes back honestly).
     this.speed -= G * _v1.y * dt;
@@ -165,12 +198,32 @@ export class Bike {
     // dies fast — a full-speed rush clears at most a ~3 m step, never a
     // 10 m face. (Sustained climbing already caps near 33 deg via grip.)
     if (climb > 0.65) this.speed -= this.speed * Math.min(1, (climb - 0.65) * 18 * dt);
-    this.speed = Math.max(MAX_REVERSE, Math.min(MAX_SPEED, this.speed));
+    // Downhill overspeed: gravity may carry the bike past the engine cap,
+    // and drag reels it back smoothly once the grade eases — no hard-clamp
+    // speed snaps in either direction.
+    if (this.speed > MAX_SPEED) {
+      this.speed -= (this.speed - MAX_SPEED) * OVERSPEED_DRAG * dt;
+    }
+    this.speed = Math.max(MAX_REVERSE, Math.min(MAX_DOWNHILL, this.speed));
 
-    // Steering: fades in with speed, tightens down at high speed.
+    // Steering: fades in with speed, tightens down at high speed, loosens
+    // slightly on low-grip surfaces (kept subtle — fun over simulation).
     const turnFactor =
       Math.max(-1, Math.min(1, this.speed / 4)) / (1 + Math.abs(this.speed) * 0.025);
-    this.yaw -= this.steer * 2.1 * turnFactor * dt;
+    this.yaw -= this.steer * 2.1 * turnFactor * (0.72 + 0.28 * this.surface.grip) * dt;
+
+    // Terrain texture: rough ground rattles the suspension and nudges the
+    // heading a touch at speed. Deterministic incommensurate oscillators —
+    // no noise samples, no allocations, purely a feel layer.
+    const sp = Math.abs(this.speed);
+    if (sp > 2) {
+      this._bumpPhase += sp * dt * 1.9;
+      const excite = this.surface.rough * Math.min(1, sp / 9);
+      this._suspVel +=
+        (Math.sin(this._bumpPhase) * 0.62 + Math.sin(this._bumpPhase * 2.37 + 1.3) * 0.38) *
+        excite * 30 * dt;
+      this.yaw += Math.sin(this._bumpPhase * 0.53 + 0.7) * excite * 0.05 * dt;
+    }
 
     // Move along the slope.
     const prevY = this.position.y;
@@ -182,11 +235,13 @@ export class Bike {
     const predictedY = prevY + (vy - G * dt) * dt;
 
     if (predictedY > groundY + 0.06 && !this.crashed) {
-      // Ground fell away faster than gravity: takeoff.
+      // Ground fell away faster than gravity: takeoff. A compressed
+      // suspension at the lip adds a small rebound pop.
       this.grounded = false;
       this.velocity.copy(_v1).multiplyScalar(this.speed);
-      this.velocity.y = Math.min(vy, 11);
+      this.velocity.y = Math.min(vy, 11) + Math.max(0, -this.suspension) * 3;
       this.position.y = prevY + vy * dt;
+      this.slip = 0;
     } else {
       const rise = groundY - prevY;
       const horiz = Math.abs(this.speed) * dt + 1e-6;
@@ -242,11 +297,16 @@ export class Bike {
       }
       this.position.y = groundY;
       this.grounded = true;
+      this.slip = 0;
 
       // Keep only the speed component along the bike's heading.
       this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
       this.speed = this.velocity.x * this.forward.x + this.velocity.z * this.forward.z;
-      this.speed = THREE.MathUtils.clamp(this.speed, MAX_REVERSE, MAX_SPEED);
+      // Hard landings soak momentum into the suspension instead of the
+      // rider keeping every m/s for free (rough landings feel weighty).
+      const impact = Math.max(0, -this.velocity.y - 5.5);
+      this.speed *= 1 - Math.min(0.28, impact * 0.022);
+      this.speed = THREE.MathUtils.clamp(this.speed, MAX_REVERSE, MAX_DOWNHILL);
 
       if (this.velocity.y < CRASH_LAND_VY && Math.abs(this.airPitch) > CRASH_LAND_PITCH) {
         this._crash();

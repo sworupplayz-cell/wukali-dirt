@@ -163,7 +163,7 @@ export class BikeModel {
 
     this.steerGroup.rotation.y = -bike.steer * 0.42;
     this.frontWheel.rotation.x = bike.wheelSpin;
-    this.rearWheel.rotation.x = bike.wheelSpin;
+    this.rearWheel.rotation.x = bike.wheelSpin + (bike.slipSpin || 0);
 
     // Blob shadow hugs the terrain (aligned to its normal) and fades with height.
     this.shadow.position.set(
