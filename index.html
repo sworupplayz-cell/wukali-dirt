@@ -51,12 +51,12 @@
     #btn-brake { right: calc(max(12px, env(safe-area-inset-right)) + clamp(80px, 18vmin, 120px) + 16px); bottom: 14px;
       width: clamp(66px, 14vmin, 95px); height: clamp(66px, 14vmin, 95px); font-size: 16px; border-radius: 50%; }
 
-    /* Phase 3I-2: LEAN (left, above steering) and TRICK (right, above brake) */
-    #btn-lean { left: max(12px, env(safe-area-inset-left));
+    /* Phase 3I-5: STUNT (left, above steering) and TRICK (right, above brake) */
+    #btn-stunt { left: max(12px, env(safe-area-inset-left));
       bottom: calc(14px + clamp(70px, 16vmin, 110px) + 12px);
       width: clamp(84px, 15vmin, 118px); height: clamp(44px, 9vmin, 60px); font-size: 15px;
       border-radius: 999px; background: rgba(0, 121, 107, 0.34); border-color: rgba(128, 222, 234, 0.55); }
-    #btn-lean.active { background: rgba(0, 188, 170, 0.6); border-color: rgba(255,255,255,0.85); }
+    #btn-stunt.active { background: rgba(0, 188, 170, 0.6); border-color: rgba(255,255,255,0.85); }
     #btn-trick { right: calc(max(12px, env(safe-area-inset-right)) + clamp(80px, 18vmin, 120px) + 16px);
       bottom: calc(14px + clamp(66px, 14vmin, 95px) + 12px);
       width: clamp(84px, 15vmin, 118px); height: clamp(44px, 9vmin, 60px); font-size: 15px;
@@ -91,12 +91,15 @@
       white-space: nowrap; z-index: 15; }
     #stunt-toast.show { transform: translate(-50%, 0) scale(1); opacity: 1; }
     #stunt-toast.bad { color: #ff8a65; }
-    /* Live combo HUD (Phase 3I-1): small, unobtrusive, GPU-cheap */
-    #combo-hud { position: fixed; top: 33%; left: 50%; pointer-events: none;
-      transform: translate(-50%, 0) scale(0.9); opacity: 0;
-      color: #b9f6ca; font-size: clamp(14px, 3.4vmin, 22px); font-weight: 800; letter-spacing: 1px;
-      text-shadow: 0 2px 0 rgba(0,0,0,0.4); transition: transform 0.12s ease-out, opacity 0.15s ease-out;
+    /* Live combo panel (Phase 3I-5): small line-item list, GPU-cheap */
+    #combo-hud { position: fixed; top: 31%; left: 50%; pointer-events: none;
+      transform: translate(-50%, 0) scale(0.9); opacity: 0; text-align: center;
+      color: #b9f6ca; font-size: clamp(12px, 2.9vmin, 18px); font-weight: 800; letter-spacing: 1px;
+      line-height: 1.35; text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+      transition: transform 0.12s ease-out, opacity 0.15s ease-out;
       white-space: nowrap; z-index: 15; }
+    #combo-hud .ch { color: #ffe082; font-size: 1.2em; }
+    #combo-hud .ct { color: #fff; }
     #combo-hud.show { opacity: 1; }
     #combo-hud.pop { transform: translate(-50%, 0) scale(1.12); }
     #combo-hud.show:not(.pop) { transform: translate(-50%, 0) scale(1); }
@@ -194,7 +197,7 @@
     <div class="ctl" id="btn-right"  data-control="right">&#9654;</div>
     <div class="ctl" id="btn-brake"  data-control="brake">BRAKE</div>
     <div class="ctl" id="btn-gas"    data-control="gas">GAS</div>
-    <div class="ctl" id="btn-lean"   data-control="lean">LEAN</div>
+    <div class="ctl" id="btn-stunt"  data-control="stunt">STUNT</div>
     <div class="ctl" id="btn-trick"  data-control="trick">TRICK</div>
     <div class="ctl" id="btn-pause">&#10074;&#10074;</div>
     <div class="ctl" id="btn-reset">&#8634;</div>

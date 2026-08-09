@@ -49,10 +49,7 @@ export class Bike {
     this.airPitch = 0;       // extra pitch while airborne, rad
     this.airPitchTravel = 0; // signed pitch rotation accumulated this flight
     this.groundPitch = 0;    // wheelie (+) / endo (-) pitch while grounded
-    this.flipDir = 0;        // active flip spin: +1 back, -1 front
     this.pivotShift = new THREE.Vector3(); // model shift: pitch about the contact wheel
-    this._flipArmT = false;  // throttle released since takeoff (flip re-press arm)
-    this._flipArmB = false;
     this._trickVel = 0;      // TRICK button spin velocity (momentum, rad/s)
     this.crashRoll = 0;      // tip-over animation when crashed
     this.grounded = true;
@@ -98,10 +95,7 @@ export class Bike {
     this.airPitch = 0;
     this.airPitchTravel = 0;
     this.groundPitch = 0;
-    this.flipDir = 0;
     this.pivotShift.set(0, 0, 0);
-    this._flipArmT = false;
-    this._flipArmB = false;
     this._trickVel = 0;
     this.crashRoll = 0;
     this.grounded = true;
@@ -130,7 +124,7 @@ export class Bike {
     const throttle = this.crashed ? 0 : input.throttle;
     const brake = this.crashed ? 0 : input.brake;
     const steerIn = this.crashed ? 0 : input.steer;
-    const lean = this.crashed ? 0 : (input.lean || 0);
+    const stunt = this.crashed ? 0 : (input.stunt || 0);
     const trick = this.crashed ? 0 : (input.trick || 0);
 
     // Smooth the steering input so touch taps don't snap the bike.
@@ -145,9 +139,9 @@ export class Bike {
     }
 
     if (this.grounded) {
-      this._groundStep(dt, throttle, brake, lean);
+      this._groundStep(dt, throttle, brake, stunt);
     } else {
-      this._airStep(dt, throttle, brake, lean, trick);
+      this._airStep(dt, throttle, brake, stunt, trick);
     }
 
     if (this.crashed) {
@@ -172,7 +166,7 @@ export class Bike {
     }
   }
 
-  _groundStep(dt, throttle, brake, lean = 0) {
+  _groundStep(dt, throttle, brake, stunt = 0) {
     // Forward on the ground plane.
     this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     const n = this.groundNormal;
@@ -224,11 +218,11 @@ export class Bike {
 
     // Steering: fades in with speed, tightens down at high speed, loosens
     // slightly on low-grip surfaces (kept subtle — fun over simulation).
-    // LEAN: the rider hangs off the bike — cornering bites ~25% harder.
+    // STUNT: the rider actively works the bike — cornering bites harder.
     const turnFactor =
       Math.max(-1, Math.min(1, this.speed / 4)) / (1 + Math.abs(this.speed) * 0.025);
     this.yaw -= this.steer * 2.1 * turnFactor * (0.72 + 0.28 * this.surface.grip) *
-      (1 + 0.25 * lean) * dt;
+      (1 + 0.25 * stunt) * dt;
 
     // Terrain texture: rough ground rattles the suspension and nudges the
     // heading a touch at speed. Deterministic incommensurate oscillators —
@@ -240,8 +234,8 @@ export class Bike {
       this._suspVel +=
         (Math.sin(this._bumpPhase) * 0.62 + Math.sin(this._bumpPhase * 2.37 + 1.3) * 0.38) *
         excite * 30 * dt;
-      // LEAN also steadies the bike: rough-ground heading wander halves.
-      this.yaw += Math.sin(this._bumpPhase * 0.53 + 0.7) * excite * 0.05 * (1 - 0.5 * lean) * dt;
+      // STUNT also steadies the bike: rough-ground heading wander halves.
+      this.yaw += Math.sin(this._bumpPhase * 0.53 + 0.7) * excite * 0.05 * (1 - 0.5 * stunt) * dt;
     }
 
     // Move along the slope.
@@ -262,9 +256,7 @@ export class Bike {
       this.position.y = prevY + vy * dt;
       this.slip = 0;
       this.airPitchTravel = 0;
-      this.flipDir = 0;
       this._trickVel = 0;
-      this._flipArmT = this._flipArmB = false; // flips need a release AFTER takeoff
     } else {
       const rise = groundY - prevY;
       const horiz = Math.abs(this.speed) * dt + 1e-6;
@@ -283,70 +275,58 @@ export class Bike {
       }
     }
 
-    // Lean into turns (deeper when the LEAN button is held).
+    // Lean into turns (deeper while STUNT is held — active body control).
     const targetRoll = THREE.MathUtils.clamp(
-      this.steer * 0.5 * (1 + 0.55 * lean) * Math.min(1, Math.abs(this.speed) / 9) *
+      this.steer * 0.5 * (1 + 0.55 * stunt) * Math.min(1, Math.abs(this.speed) / 9) *
         Math.sign(this.speed >= 0 ? 1 : -1),
       -0.68, 0.68);
     this.roll += (targetRoll - this.roll) * Math.min(1, 8 * dt);
     this.airPitch *= 1 - Math.min(1, 10 * dt);
 
-    // Ground stunts (Phase 3I-1): a committed full-throttle launch lifts
-    // the nose (wheelie); hard braking from speed drops it (endo). Purely
-    // an orientation/feel layer — position, speed and collision never see
-    // it. Gated to flat-ish ground so steep climbs don't pin the nose up.
-    if (!this.crashed && throttle > 0.85 && this.speed > 2.5 && this.speed < 19 &&
-        _v1.y < 0.15 && this.surface.grip > 0.5) {
-      this.groundPitch = Math.min(0.45, this.groundPitch + 1.5 * dt);
-    } else if (!this.crashed && brake > 0.85 && this.speed > 4) {
+    // Ground stunts (Phase 3I-5): ONLY the STUNT button pitches the bike.
+    // GAS never wheelies, BRAKE never endos on their own. STUNT while
+    // moving = controlled wheelie (throttle feeds the lift); STUNT+BRAKE
+    // = endo. Hard braking alone gets a tiny cosmetic fork dive that can
+    // never reach trick-detection thresholds. Purely an orientation/feel
+    // layer — position, speed and collision never see it.
+    if (!this.crashed && stunt > 0 && brake > 0.5 && this.speed > 4) {
       this.groundPitch = Math.max(-0.26, this.groundPitch - 2.0 * dt);
+    } else if (!this.crashed && stunt > 0 && this.speed > 2.5) {
+      this.groundPitch = Math.min(0.45, this.groundPitch + (1.1 + 0.7 * throttle) * dt);
+    } else if (!this.crashed && brake > 0.85 && this.speed > 6) {
+      this.groundPitch += (-0.07 - this.groundPitch) * Math.min(1, 6 * dt); // cosmetic dive
     } else {
       this.groundPitch -=
         Math.sign(this.groundPitch) * Math.min(Math.abs(this.groundPitch), 2.6 * dt);
     }
+    // Ramp prep: holding STUNT preloads the suspension (~10 cm crouch);
+    // the existing takeoff pop converts it into a slightly bigger launch.
+    if (stunt > 0) this._suspVel -= 6 * dt;
   }
 
-  _airStep(dt, throttle, brake, lean = 0, trick = 0) {
+  _airStep(dt, throttle, brake, stunt = 0, trick = 0) {
     const prevX = this.position.x, prevZ = this.position.z, prevYair = this.position.y;
     this.velocity.y -= G * dt;
     this.position.addScaledVector(this.velocity, dt);
 
-    // Light air control: throttle lifts the nose, brake drops it,
-    // steering gives a slow air-turn plus lean. Rates tuned so holding
-    // full throttle over a normal jump stays below the crash threshold.
-    // FLIPS (Phase 3I-1) are a deliberate commitment: release the input
-    // after takeoff, then RE-press it — throttle spins a backflip, brake
-    // a frontflip. Inputs simply held from before the jump keep the old
-    // gentle authority, so nothing flips by accident.
-    if (throttle < 0.3) this._flipArmT = true;
-    if (brake < 0.3) this._flipArmB = true;
-    if (this.flipDir === 0) {
-      if (this._flipArmT && throttle > 0.6) this.flipDir = 1;
-      else if (this._flipArmB && brake > 0.6) this.flipDir = -1;
-    } else if ((this.flipDir === 1 && throttle < 0.4) ||
-               (this.flipDir === -1 && brake < 0.4)) {
-      this.flipDir = 0;
-    }
-    // TRICK button (Phase 3I-2): committed rotation with real momentum.
-    // Hold to spin (backflip by default, frontflip while BRAKE is also
-    // held); release stops ADDING rotation — the spin bleeds off instead
-    // of snapping. Total rotation per flight is capped (~2.5 turns).
+    // TRICK button (Phase 3I-5): the ONLY way to flip. Committed rotation
+    // with real momentum — hold to spin (backflip by default, frontflip
+    // while BRAKE is also held); release stops ADDING rotation and the
+    // spin bleeds off instead of snapping. Total rotation per flight is
+    // capped (~2.5 turns). Without TRICK, gas/brake keep only the old
+    // gentle attitude authority (clamped, can never complete a flip).
     let dPitch;
     if (trick > 0 || Math.abs(this._trickVel) > 0.08) {
       if (trick > 0) {
         const dir = brake > 0.4 ? -1 : 1;
-        this._trickVel = THREE.MathUtils.clamp(this._trickVel + dir * 11 * dt, -5.4, 5.4);
+        this._trickVel = THREE.MathUtils.clamp(this._trickVel + dir * 30 * dt, -8.0, 8.0);
       } else {
-        this._trickVel -= Math.sign(this._trickVel) * Math.min(Math.abs(this._trickVel), 6.5 * dt);
+        this._trickVel -= Math.sign(this._trickVel) * Math.min(Math.abs(this._trickVel), 10 * dt);
       }
       if (Math.abs(this.airPitchTravel) > 15.5) {
         this._trickVel *= 1 - Math.min(1, 10 * dt); // no unlimited spinning
       }
-      this.flipDir = 0; // the explicit control supersedes the re-press flip
       dPitch = this._trickVel * dt;
-      this.airPitch += dPitch;
-    } else if (this.flipDir !== 0) {
-      dPitch = this.flipDir * 5.0 * dt; // a full flip takes ~1.26 s of air
       this.airPitch += dPitch;
     } else {
       dPitch = (throttle * 0.9 - brake * 1.4) * dt;
@@ -358,21 +338,21 @@ export class Bike {
     }
     this.airPitchTravel += dPitch;
 
-    // LEAN in the air = orientation recovery: pulls the bike toward the
+    // STUNT in the air = orientation recovery: pulls the bike toward the
     // nearest level attitude at a bounded rate and damps trick spin —
     // the skill move before a sketchy landing. Never instant.
-    if (lean > 0) {
+    if (stunt > 0) {
       const w = Math.atan2(Math.sin(this.airPitch), Math.cos(this.airPitch));
-      const corr = Math.sign(w) * Math.min(Math.abs(w), 2.4 * dt);
+      const corr = Math.sign(w) * Math.min(Math.abs(w), 3.2 * dt);
       this.airPitch -= corr;
       this.airPitchTravel -= corr;
-      this._trickVel *= 1 - Math.min(1, 4 * dt);
+      this._trickVel *= 1 - Math.min(1, 6 * dt);
     }
 
     this.groundPitch *= 1 - Math.min(1, 5 * dt);
     // Steering spins the bike a little; TRICK boosts the air-turn rate.
     this.yaw -= this.steer * (0.8 + 1.2 * trick) * dt;
-    this.roll += (this.steer * 0.35 - this.roll) * Math.min(1, (lean > 0 ? 8 : 3) * dt);
+    this.roll += (this.steer * 0.35 - this.roll) * Math.min(1, (stunt > 0 ? 8 : 3) * dt);
 
     let groundY = this.world.getHeight(this.position.x, this.position.z);
     if (this.position.y <= groundY) {
@@ -392,7 +372,6 @@ export class Bike {
       this.position.y = groundY;
       this.grounded = true;
       this.slip = 0;
-      this.flipDir = 0;
       this._trickVel = 0;
       // A completed flip is a level landing: judge (and continue) from the
       // wrapped angle, so full rotations land clean and half-flips crash.

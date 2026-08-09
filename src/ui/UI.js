@@ -67,11 +67,14 @@ export class UI {
       this._stuntTimer = setTimeout(() => this.stuntToast.classList.remove('show'), 1500);
     };
 
-    // Live combo HUD (Phase 3I-1): small, top-center, transform/opacity only.
+    // Live combo panel (Phase 3I-5): header, line items, running total.
     this.comboHud = $('combo-hud');
     game.stunts.onCombo = (count, pending, mult) => {
       if (count > 0 && pending > 0) {
-        this.comboHud.textContent = count > 1 ? `COMBO x${mult}  +${pending}` : `+${pending}`;
+        const lines = game.stunts.comboLines.map((l) => `<div>${l}</div>`).join('');
+        this.comboHud.innerHTML = count > 1
+          ? `<div class="ch">COMBO x${mult}</div>${lines}<div class="ct">TOTAL +${pending}</div>`
+          : lines;
         this.comboHud.classList.add('show');
         // Cheap pop: retrigger the scale transition on every trick.
         this.comboHud.classList.remove('pop');
