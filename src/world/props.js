@@ -65,6 +65,37 @@ function log() {
     .rotateZ(Math.PI / 2).translate(0, 0.24, 0);
 }
 
+function grass() {
+  // Three crossed diamond blades — no textures, no transparency (~6 tris).
+  const parts = [];
+  for (let k = 0; k < 3; k++) {
+    const blade = colorize(new THREE.PlaneGeometry(0.5, 0.55), 0.38, 0.52, 0.20)
+      .rotateY((k / 3) * Math.PI)
+      .translate(0, 0.26, 0);
+    parts.push(blade);
+  }
+  return merge(parts);
+}
+
+function stone() {
+  const g = new THREE.IcosahedronGeometry(0.24, 0);
+  const rng = mulberry32(777);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    p.setXYZ(i, p.getX(i) * (0.8 + rng() * 0.5), p.getY(i) * (0.55 + rng() * 0.3), p.getZ(i) * (0.8 + rng() * 0.5));
+  }
+  g.computeVertexNormals();
+  return colorize(g, 0.52, 0.50, 0.46).translate(0, 0.1, 0);
+}
+
+function branch() {
+  const a = colorize(new THREE.CylinderGeometry(0.05, 0.08, 1.6, 5), 0.36, 0.27, 0.16)
+    .rotateZ(Math.PI / 2).rotateY(0.3).translate(0, 0.07, 0);
+  const b = colorize(new THREE.CylinderGeometry(0.03, 0.05, 0.7, 4), 0.33, 0.24, 0.14)
+    .rotateZ(Math.PI / 2).rotateY(-0.9).translate(0.3, 0.06, 0.15);
+  return merge([a, b]);
+}
+
 function haystack() {
   const body = colorize(new THREE.ConeGeometry(1.15, 1.9, 7), 0.72, 0.60, 0.32).translate(0, 0.95, 0);
   const pole = colorize(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 4), 0.4, 0.3, 0.18).translate(0, 2.05, 0);
@@ -181,6 +212,10 @@ export const PROP_TYPES = [
   { name: 'stupa', build: stupa, max: 16 },
   { name: 'bridge', build: bridgeDeck, max: 16 },
   { name: 'ramp', build: rampDeck, max: 16, doubleSided: true },
+  // Micro-props (Phase 3C-1 ground detail): dense, tiny, never collide.
+  { name: 'grass', build: grass, max: 1000, doubleSided: true },
+  { name: 'stone', build: stone, max: 450 },
+  { name: 'branch', build: branch, max: 160 },
 ];
 
 export const PROP = {};

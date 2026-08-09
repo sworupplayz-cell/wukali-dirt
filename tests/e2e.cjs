@@ -185,8 +185,9 @@ function check(name, ok, detail = '') {
 
   check('Rode a long distance in all directions', totalDist > 400, `${Math.round(totalDist)} m, ${crashes} crashes`);
   check('Chunk count stays bounded', maxChunks <= 25, `max=${maxChunks}`);
-  check('Instance count stays bounded', maxInstances < 900, `max=${maxInstances}`);
+  check('Instance count stays bounded', maxInstances < 1700, `max=${maxInstances}`); // micro-prop budget added in 3C-1
   check('Collider count stays bounded', maxColliders < 260, `max=${maxColliders}`);
+  await sleep(2500); // teleport at the last leg enqueues a full ring; let it drain
   s = await state();
   check('Queue drains after riding', s.debug.queued <= 4, `queued=${s.debug.queued}`);
   check('No physics/streaming failure during ride', !worst, worst ? JSON.stringify(worst) : '');

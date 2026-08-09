@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { InstancedPool } from './InstancedPool.js';
 import { PROP } from './props.js';
 import { makeInfo } from './TerrainGenerator.js';
-import { mulberry32, hashInt, sstep } from './noise.js';
+import { mulberry32, hashInt, sstep, vnoise } from './noise.js';
 
 /**
  * ChunkManager — endless world streaming.
@@ -30,7 +30,7 @@ const INNER_R = 1;     // full-resolution radius
 const INNER_RES = 32;  // quads per side, inner (2 m)
 const OUTER_RES = 16;  // quads per side, outer (4 m)
 const SKIRT = 3;       // skirt depth (m)
-const MAX_PROPS_PER_CHUNK = 32;
+const MAX_PROPS_PER_CHUNK = 44;
 
 export class ChunkManager {
   constructor(scene, generator) {
@@ -265,6 +265,28 @@ export class ChunkManager {
       c.colliders.push({ x: summit.x - 6, z: summit.z + 4, r: 1.1 });
     }
 
+    // Micro-props: grass tufts, small stones, fallen branches. Denser and
+    // road-tolerant (they may line trail edges), never collide, and their
+    // density follows a coherent patch noise so meadows/clearings vary.
+    for (let k2 = 0; k2 < 18 && c.props.length < MAX_PROPS_PER_CHUNK; k2++) {
+      const x = ox + rng() * CHUNK_SIZE;
+      const z = oz + rng() * CHUNK_SIZE;
+      this.gen.sampleInfo(x, z, info);
+      if (info.trail > 0.6 || info.stream > 0.3) continue; // keep path centers clean
+      if (this.gen.nearFeature(x, z)) continue;
+      const patch = vnoise(x * 0.02 + 7.7, z * 0.02 - 3.3, this.gen.seed * 13 + 91);
+      const lush = (info.wH + info.wFa * 0.9 + info.wF * 0.6) * (0.3 + patch);
+      const pick = rng();
+      let t = -1, s = 0.7 + rng() * 0.7, sink = 0.05;
+      if (pick < 0.62 * lush) t = PROP.grass;
+      else if (pick < 0.62 * lush + 0.20 * (info.wRk + info.wMnt + info.mtn * 0.8 + 0.12)) {
+        t = PROP.stone; sink = 0.08 + (1 - this._normalY(x, z)) * 0.5;
+      }
+      else if (pick < 0.62 * lush + 0.34 && info.wF > 0.4) { t = PROP.branch; sink = 0.05; }
+      if (t < 0) continue;
+      c.props.push({ t, x, y: this.gen.height(x, z) - sink, z, yaw: rng() * Math.PI * 2, s });
+    }
+
     for (let k2 = 0; k2 < 44 && c.props.length < MAX_PROPS_PER_CHUNK; k2++) {
       const x = ox + rng() * CHUNK_SIZE;
       const z = oz + rng() * CHUNK_SIZE;
@@ -279,9 +301,10 @@ export class ChunkManager {
       // their own rules: dense pine band low, rocks high, no farm props.
       let t = -1, s = 1, sink = 0.1, collR = 0;
       const wH = info.wH, wF = info.wF, wFa = info.wFa, wRk = info.wRk, wMnt = info.wMnt;
+      const forestPatch = 0.45 + 1.1 * vnoise(x * 0.012 - 11.1, z * 0.012 + 8.8, this.gen.seed * 13 + 92);
       if (info.mtn > 0.04) {
         const band = sstep(0.05, 0.15, info.mtn) * (1 - sstep(0.45, 0.6, info.mtn));
-        let acc = 1.0 * band + 0.08;
+        let acc = 1.0 * band * forestPatch + 0.08;
         if (pick < acc && ny > 0.8) { t = PROP.pine; s = 0.8 + rng() * 0.7; collR = 0.5 * s; }
         else if (pick < (acc += 0.5 * sstep(0.45, 0.65, info.mtn) + 0.05)) {
           t = PROP.rock; s = 0.5 + rng() * 1.1; sink = 0.25 * s;
@@ -289,7 +312,7 @@ export class ChunkManager {
         }
         else if (pick < (acc += 0.18 * band)) { t = PROP.bush; s = 0.7 + rng() * 0.8; }
       } else {
-      let acc = 0.78 * wF + 0.12 * wRk + 0.08 * wH + 0.06 * wMnt;
+      let acc = (0.78 * wF + 0.08 * wH) * forestPatch + 0.12 * wRk + 0.06 * wMnt;
       if (pick < acc && ny > 0.82) { t = PROP.pine; s = 0.8 + rng() * 0.7; collR = 0.5 * s; }
       else if (pick < (acc += 0.36 * wH + 0.15 * wFa) && ny > 0.82) { t = PROP.tree; s = 0.8 + rng() * 0.6; collR = 0.5 * s; }
       else if (pick < (acc += 0.34 * wH + 0.30 * wF + 0.16 * wRk + 0.10 * wFa)) { t = PROP.bush; s = 0.7 + rng() * 0.8; }

@@ -140,8 +140,8 @@ export class WorldManager {
     // Fog hides the streaming edge (~128 m worst case) and doubles as
     // Himalayan valley haze under the distant peaks.
     scene.fog = new THREE.Fog(sky, 62, 158);
-    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x8a6f47, 0.95));
-    const sun = new THREE.DirectionalLight(0xfff2d8, 1.15);
+    scene.add(new THREE.HemisphereLight(0xd4ebff, 0x7d6a44, 0.92));
+    const sun = new THREE.DirectionalLight(0xffedc9, 1.22);
     sun.position.set(60, 90, 30);
     scene.add(sun);
   }

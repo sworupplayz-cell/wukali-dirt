@@ -15,7 +15,7 @@ import * as THREE from 'three';
  */
 const POOL = 8;
 const VIEW_R = 2200;      // impostors appear within this range
-const RINGS = 12, SEGS = 32;
+const RINGS = 14, SEGS = 36;
 const BASE_SINK = 1.6;    // m below the real surface at the peak
 const EDGE_SINK = 3.0;    // additional sink toward the rim
 const NEAR_SINK = 6.0;    // extra sink while the player is on the mountain
@@ -81,12 +81,19 @@ export class MountainImpostors {
       const slot = this._assigned.indexOf(null);
       if (slot < 0) break;
       this._assigned[slot] = m;
-      this._fill(this._meshes[slot], m);
+    }
+    // (Re)shape + recolor with distance-based haze: near impostors read as
+    // solid terrain, far ones melt into the atmosphere. Runs only when the
+    // 300 m tracking cell changes (~1 ms per mountain).
+    for (let i = 0; i < POOL; i++) {
+      if (this._assigned[i]) this._fill(this._meshes[i], this._assigned[i], x, z);
     }
   }
 
   /** Sample the real terrain at every vertex; color by height fraction. */
-  _fill(mesh, m) {
+  _fill(mesh, m, px, pz) {
+    const dist = Math.hypot(m.x - px, m.z - pz);
+    const haze = 0.16 + 0.55 * sm(250, 1900, dist);
     const pos = mesh.geometry.attributes.position;
     const col = mesh.geometry.attributes.color;
     const hs = this._heights;
@@ -115,19 +122,28 @@ export class MountainImpostors {
         const a = (s2 / SEGS) * Math.PI * 2;
         pos.setXYZ(i, Math.cos(a) * rr * outer, hs[i] - sink, Math.sin(a) * rr * outer);
         const t = (hs[i] - baseY) / span;
-        let r = 0.42, g = 0.50, b = 0.38;              // forested base
-        if (t > 0.42) { r = 0.47; g = 0.45; b = 0.42; } // rock
-        if (t > 0.72) { r = 0.52; g = 0.52; b = 0.55; } // high rock
-        if (t > 0.85 && snowy) { r = 0.93; g = 0.94; b = 0.97; }
-        col.setXYZ(i, r + (0.70 - r) * 0.22, g + (0.78 - g) * 0.22, b + (0.88 - b) * 0.22);
+        // Smoothly blended bands (hard thresholds read as painted rings).
+        let r = 0.42, g = 0.50, b = 0.38;               // forested base
+        const rockM = sm(0.34, 0.52, t);
+        r += (0.47 - r) * rockM; g += (0.45 - g) * rockM; b += (0.42 - b) * rockM;
+        const highM = sm(0.64, 0.82, t);
+        r += (0.52 - r) * highM; g += (0.52 - g) * highM; b += (0.55 - b) * highM;
+        const snowM = snowy ? sm(0.82, 0.92, t) : 0;
+        r += (0.93 - r) * snowM; g += (0.94 - g) * snowM; b += (0.97 - b) * snowM;
+        col.setXYZ(i, r + (0.70 - r) * haze, g + (0.78 - g) * haze, b + (0.88 - b) * haze);
       }
     }
-    // Skirt: below the rim ring.
+    // Skirt: outward-sloping apron fading to horizon haze — edge-on it
+    // reads as a foothill base rising out of the atmosphere. (A vertical
+    // apron reads as a giant pale curtain at mid-range.)
     const rimStart = RINGS * SEGS;
     for (let s2 = 0; s2 < SEGS; s2++, i++) {
       const a = (s2 / SEGS) * Math.PI * 2;
-      pos.setXYZ(i, Math.cos(a) * outer, hs[rimStart + s2] - 30, Math.sin(a) * outer);
-      col.setXYZ(i, col.getX(rimStart + s2), col.getY(rimStart + s2), col.getZ(rimStart + s2));
+      // Jitter breaks the ruler-straight rim/apron silhouette line.
+      const jit = Math.sin(s2 * 12.9898 + m.R) * 43758.5453;
+      const jr = (jit - Math.floor(jit)) * 44 - 22;
+      pos.setXYZ(i, Math.cos(a) * (outer + 320 + jr), hs[rimStart + s2] - 150 + jr * 0.6, Math.sin(a) * (outer + 320 + jr));
+      col.setXYZ(i, 0.70, 0.82, 0.93); // melt into the sky/haze
     }
     pos.needsUpdate = true;
     col.needsUpdate = true;
@@ -137,8 +153,8 @@ export class MountainImpostors {
     mesh.updateMatrix();
     mesh.visible = true;
     mesh.geometry.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3(0, (peakY + baseY) / 2, 0),
-      Math.hypot(outer, span) + 34
+      new THREE.Vector3(0, (peakY + baseY) / 2 - 60, 0),
+      Math.hypot(outer + 340, span + 170)
     );
   }
 }
@@ -159,4 +175,9 @@ function buildDomeGeometry() {
   }
   geo.setIndex(idx);
   return geo;
+}
+
+function sm(a, b, x) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 }

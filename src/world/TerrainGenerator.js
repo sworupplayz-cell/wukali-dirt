@@ -84,6 +84,8 @@ export class TerrainGenerator {
   colorFor(info, out) {
     const j = info.jit;
     const h = info.h;
+    // Large-scale dry/lush ground patches (adds life to open ground).
+    const dry = info.dry;
     // Biome base colors (kept saturated — distance fog desaturates plenty).
     // Rocky hills read brown (exposed dirt), high mountains read grey stone.
     let r = (0.31 + 0.10 * j) * info.wH + (0.19 + 0.05 * j) * info.wF +
@@ -105,6 +107,9 @@ export class TerrainGenerator {
       g += (0.41 + (0.94 - 0.41) * sn) * info.wMnt;
       b += (0.46 + (0.97 - 0.46) * sn) * info.wMnt;
     }
+    // Dry-patch tint on open ground (hills/farm), fading under forest.
+    const dryM = dry * (info.wH + info.wFa * 0.7) * 0.5;
+    r += (0.55 - r) * dryM; g += (0.50 - g) * dryM; b += (0.30 - b) * dryM;
     // Mountain destination bands: forest low, rock mid, grey/snow top.
     if (info.mtn > 0.02) {
       const t = info.mtn;
@@ -122,6 +127,9 @@ export class TerrainGenerator {
     r += (0.56 + 0.07 * j - r) * t;
     g += (0.44 + 0.05 * j - g) * t;
     b += (0.26 - b) * t;
+    // Edge wear: slightly darker, rougher dirt along trail borders.
+    const wear = sstep(0.3, 0.5, info.trail) * (1 - sstep(0.78, 0.95, info.trail)) * 0.35;
+    r -= r * 0.10 * wear; g -= g * 0.11 * wear; b -= b * 0.08 * wear;
     // Stream bed: wet stones, watery center.
     const sm = info.stream;
     if (sm > 0.01) {
@@ -424,6 +432,7 @@ export class TerrainGenerator {
       info.wH = wH; info.wF = wF; info.wFa = wFa; info.wRk = wRk; info.wMnt = wMnt;
       info.lo = lo; info.trail = trailM; info.stream = streamM; info.terr = terr;
       info.jit = vnoise(x * 0.13, z * 0.13, this.SJ);
+      info.dry = sstep(0.55, 0.8, vnoise(x * 0.03 + 17.3, z * 0.03 - 9.9, this.SJ + 5));
       info.mtn = mProf;
       info.mtnH = mtn ? mtn.H : 0;
     }
@@ -540,6 +549,6 @@ const FARM_PALETTE = [
 export function makeInfo() {
   return {
     h: 0, wH: 0, wF: 0, wFa: 0, wRk: 0, wMnt: 0, lo: 0,
-    trail: 0, stream: 0, terr: 0, jit: 0, mtn: 0, mtnH: 0,
+    trail: 0, stream: 0, terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0,
   };
 }

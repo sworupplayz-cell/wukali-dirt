@@ -34,7 +34,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(68, 1, 0.1, 1600); // far covers the distant peaks
+    this.camera = new THREE.PerspectiveCamera(68, 1, 0.1, 5200); // far covers the ridge backdrop
 
     // Deterministic world; ?seed=N in the URL selects a different one.
     const seed = Number(new URLSearchParams(location.search).get('seed')) || 20;
