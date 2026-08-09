@@ -53,6 +53,33 @@ const SIGNATURE_TYPES = [
   'sacred dome', 'terraced peak', 'storm spur',
 ];
 const NORMAL_TYPES = ['green dome', 'pine ridge', 'rocky spur', 'grass crest'];
+// Signature route personalities (kind 1..6, same order as SIGNATURE_NAMES).
+// All values feed the existing analytic dome/road pipeline — no new systems.
+const SIG_PARAMS = [
+  { // 1 Shreya Shikhar: forest approach, long climb, bridge, narrow ridge top
+    H: 128, R: 360, turns: 3.1, roadW: 3.2, narrowTop: 0.36, crown: 10,
+    bridges: [0.55], forestMul: 1.35,
+  },
+  { // 2 Aakash Chuli: open, fast, wide flowing road with big whoop jumps
+    H: 105, R: 340, turns: 2.4, roadW: 6.5, crown: 0,
+    whoopAmp: 1.7, whoopFreq: 45, forestMul: 0.25, // ~20-35 m kicker wavelength
+  },
+  { // 3 Rajkanya Himal: steep technical rock, tight switchbacks, narrow road
+    H: 118, R: 330, turns: 3.6, roadW: 2.9, crown: 8, rockBig: true, forestMul: 0.45,
+  },
+  { // 4 Basanta Shikhar: deep forest, streams run down the dome, two bridges
+    H: 100, R: 350, turns: 2.9, roadW: 4.2, crown: 4,
+    bridges: [0.35, 0.62], streamKeep: true, mud: true, forestMul: 1.5,
+  },
+  { // 5 Ganga Devi Peak: terraced village lower slopes, forest, exposed top
+    H: 110, R: 360, turns: 2.8, roadW: 4.6, crown: 6,
+    terraceLow: true, village: true, forestMul: 0.9,
+  },
+  { // 6 Mukti Himal: the hardest — highest, narrow, uneven, brutal final climb
+    H: 148, R: 380, turns: 3.4, roadW: 2.7, narrowTop: 0.3, crown: 14,
+    whoopAmp: 0.55, whoopFreq: 55, barren: true, forestMul: 0.1, // uneven chatter
+  },
+];
 
 export class TerrainGenerator {
   constructor(seed = 20) {
@@ -136,11 +163,22 @@ export class TerrainGenerator {
       const snow = sstep(0.85, 0.95, t + (j - 0.5) * 0.06) * sstep(66, 78, info.mtnH);
       r += (0.93 - r) * snow; g += (0.94 - g) * snow; b += (0.97 - b) * snow;
     }
+    // Kind-5 signature: terraced village fields colored on the lower dome.
+    if (info.mtnKind === 5 && info.terr > 0.05 && info.mtn > 0.02) {
+      const lvl = Math.floor((h + 40) / 1.1) & 3;
+      const p = FARM_PALETTE[lvl];
+      const tm = Math.min(1, info.terr * 1.2);
+      r += (p[0] + 0.04 * j - r) * tm;
+      g += (p[1] + 0.04 * j - g) * tm;
+      b += (p[2] - b) * tm;
+    }
     // Dirt trail overlay (bright sandy — reads clearly against every biome).
+    // Kind-4 signature roads read muddy under the forest canopy.
     const t = info.trail * 0.88;
-    r += (0.56 + 0.07 * j - r) * t;
-    g += (0.44 + 0.05 * j - g) * t;
-    b += (0.26 - b) * t;
+    const mud = info.mtnKind === 4 && info.mtn > 0.02;
+    r += ((mud ? 0.40 : 0.56) + 0.07 * j - r) * t;
+    g += ((mud ? 0.32 : 0.44) + 0.05 * j - g) * t;
+    b += ((mud ? 0.22 : 0.26) - b) * t;
     // Edge wear: slightly darker, rougher dirt along trail borders.
     const wear = sstep(0.3, 0.5, info.trail) * (1 - sstep(0.78, 0.95, info.trail)) * 0.35;
     r -= r * 0.10 * wear; g -= g * 0.11 * wear; b -= b * 0.08 * wear;
@@ -297,6 +335,8 @@ export class TerrainGenerator {
             name: SIGNATURE_NAMES[sigIdx],
             type: SIGNATURE_TYPES[sigIdx],
             signature: true,
+            kind: sigIdx + 1,
+            ...this._signatureGeometry(sigIdx),
           }
         : {
             name: normalNames[normIdx++],
@@ -306,10 +346,26 @@ export class TerrainGenerator {
       if (signature) sigIdx++;
       meta.registryIndex = i;
       this._registryMeta.set(c.key, meta);
+      Object.assign(this._mcells.get(c.key), meta);
+    });
 
-      // Decorate the (cached) record and derive the public entry.
+    // Second pass (all overrides active): road bridges + public entries.
+    cells.forEach((c, i) => {
+      const meta = this._registryMeta.get(c.key);
       const mn = this._mcells.get(c.key);
-      Object.assign(mn, meta);
+      if (meta.bridgeFracs === undefined && SIG_PARAMS[meta.kind - 1] &&
+          SIG_PARAMS[meta.kind - 1].bridges) {
+        // Ravine + wooden deck cut across the road at fixed route fractions.
+        meta.bridgePts = SIG_PARAMS[meta.kind - 1].bridges.map((f) => {
+          const p = this.roadPoint(mn, f);
+          return {
+            x: p.x, z: p.z,
+            dx: Math.sin(p.yaw), dz: Math.cos(p.yaw),
+            h0: this.height(p.x, p.z) + 0.1, // pre-ravine road level
+          };
+        });
+        mn.bridgePts = meta.bridgePts;
+      }
       const summitY = this.height(mn.x, mn.z);
       list.push({
         id: mn.id,
@@ -327,6 +383,22 @@ export class TerrainGenerator {
     });
     this._registryList = list;
     return list;
+  }
+
+  /** Geometry overrides for signature kind (0-based index into SIG_PARAMS). */
+  _signatureGeometry(sigIdx) {
+    const p = SIG_PARAMS[sigIdx];
+    const rStart = p.R + 100;
+    const uMax = p.turns * 2 * Math.PI;
+    return {
+      H: p.H, R: p.R, rStart, uMax,
+      k: (rStart - ROAD_END_R) / uMax,
+      roadW: p.roadW, narrowTop: p.narrowTop || 0, crown: p.crown || 0,
+      whoopAmp: p.whoopAmp || 0, whoopFreq: p.whoopFreq || 0,
+      streamKeep: !!p.streamKeep, terraceLow: !!p.terraceLow,
+      village: !!p.village, mud: !!p.mud, rockBig: !!p.rockBig,
+      barren: !!p.barren, forestMul: p.forestMul !== undefined ? p.forestMul : 1,
+    };
   }
 
   /** Mountain whose influence covers (x,z), or null; distance in _mtnD. */
@@ -435,18 +507,26 @@ export class TerrainGenerator {
       // steadily (bench-cut look on strong flanks).
       let u = Math.atan2(z - mtn.z, x - mtn.x) - mtn.phi;
       u -= Math.floor(u / (2 * Math.PI)) * 2 * Math.PI; // 0..2π
-      let bestDr = Infinity, bestRk = 0;
+      let bestDr = Infinity, bestRk = 0, bestU = 0;
       for (; u <= mtn.uMax; u += 2 * Math.PI) {
         const rk = mtn.rStart - mtn.k * u;
         const dr = Math.abs(mtnD - rk);
-        if (dr < bestDr) { bestDr = dr; bestRk = rk; }
+        if (dr < bestDr) { bestDr = dr; bestRk = rk; bestU = u; }
       }
       if (bestDr < 26) {
-        roadMask = sstep(6.2, 3.6, bestDr);
+        // Signature roads set their own width; some narrow with altitude
+        // ("dangerous ridge" feel — narrower bench, closer edges).
+        const wIn = (mtn.roadW || 3.6) * (1 - (mtn.narrowTop || 0) * mProf);
+        roadMask = sstep(wIn + 2.6, wIn, bestDr);
         modBlend = sstep(26, 7, bestDr);
         const tk = bestRk / mtn.R;
         const qk = tk < 1 ? 1 - tk * tk : 0;
         roadDelta = (qk * qk - mProf) * mtn.H;
+        // Whoop rollers along the road (natural jump kickers / uneven track).
+        if (mtn.whoopAmp) {
+          const w2 = Math.max(0, Math.sin(bestU * mtn.whoopFreq));
+          roadDelta += mtn.whoopAmp * w2 * w2 * w2 * sstep(0.92, 0.7, mProf);
+        }
       }
       if (modBlend > 0) mMod += (mtn.modC - mMod) * modBlend;
     }
@@ -487,9 +567,13 @@ export class TerrainGenerator {
       hGentle += ridge * 0.8;
     }
 
-    // Terraced farmland (quantize height on masked farm slopes).
-    const terr = wFa * sstep(0.35, 0.50, vnoise(x * 0.006 + 31, z * 0.006 - 17, this.STE)) *
+    // Terraced farmland (quantize height on masked farm slopes). Kind-5
+    // signature mountains carry terraced village fields on their lower dome.
+    let terr = wFa * sstep(0.35, 0.50, vnoise(x * 0.006 + 31, z * 0.006 - 17, this.STE)) *
       (1 - mCore);
+    if (mtn && mtn.terraceLow) {
+      terr = Math.max(terr, sstep(0.04, 0.12, mProf) * (1 - sstep(0.3, 0.45, mProf)) * 0.8);
+    }
     if (terr > 0.01) {
       const q = h / 1.1;
       const fq = q - Math.floor(q);
@@ -501,7 +585,8 @@ export class TerrainGenerator {
     let streamM = 0;
     if (withStream && lo > 0.05) {
       const sN = vnoise(x * 0.004 - 11.3, z * 0.004 + 23.7, this.SS) - 0.5;
-      streamM = sstep(0.034, 0.011, Math.abs(sN)) * lo * (1 - mCore);
+      const streamAttn = mtn && mtn.streamKeep ? 1 - 0.35 * mCore : 1 - mCore;
+      streamM = sstep(0.034, 0.011, Math.abs(sN)) * lo * streamAttn;
       h -= 1.35 * streamM;
       hGentle -= 1.35 * streamM;
     }
@@ -525,9 +610,29 @@ export class TerrainGenerator {
     // Mountain dome + rideable spiral road.
     if (mtn) {
       h += mtn.H * mProf * mMod;
+      // Summit crown: an extra uncancelled cone — the final ascent steepens
+      // and the peak reads bigger (signature "dramatic finish").
+      if (mtn.crown) h += mtn.crown * sstep(0.72, 0.98, mProf);
       if (roadMask > 0) {
         h += roadDelta * mMod * roadMask;
         if (roadMask * 0.95 > trailM) trailM = roadMask * 0.95; // dirt color
+      }
+      // Road bridges: a ravine cut across the route, spanned by a level deck
+      // (the wooden deck prop is placed by the chunk scatter).
+      if (mtn.bridgePts) {
+        for (let bi = 0; bi < mtn.bridgePts.length; bi++) {
+          const bp = mtn.bridgePts[bi];
+          const rbx = x - bp.x, rbz = z - bp.z;
+          if (rbx * rbx + rbz * rbz > 2500) continue;
+          const bu = rbx * bp.dx + rbz * bp.dz;   // along the road
+          const bv = -rbx * bp.dz + rbz * bp.dx;  // across the road
+          if (Math.abs(bu) < 15 && Math.abs(bv) < 30) {
+            const deck = sstep(9, 6.5, Math.abs(bu)) * sstep(2.6, 1.9, Math.abs(bv));
+            const gully = Math.cos((bu / 30) * Math.PI);
+            h -= 3.4 * gully * gully * sstep(30, 8, Math.abs(bv)) * (1 - deck);
+            if (bp.h0 > h) h += (bp.h0 - h) * deck;
+          }
+        }
       }
     }
 
@@ -538,6 +643,8 @@ export class TerrainGenerator {
       info.dry = sstep(0.55, 0.8, vnoise(x * 0.03 + 17.3, z * 0.03 - 9.9, this.SJ + 5));
       info.mtn = mProf;
       info.mtnH = mtn ? mtn.H : 0;
+      info.mtnKind = mtn && mtn.kind ? mtn.kind : 0;
+      info.mtnRef = mtn || null;
     }
 
     if (withFeatures) h = this._features(x, z, h);
@@ -652,6 +759,6 @@ const FARM_PALETTE = [
 export function makeInfo() {
   return {
     h: 0, wH: 0, wF: 0, wFa: 0, wRk: 0, wMnt: 0, lo: 0,
-    trail: 0, stream: 0, terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0,
+    trail: 0, stream: 0, terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0, mtnKind: 0, mtnRef: null,
   };
 }

@@ -253,16 +253,49 @@ export class ChunkManager {
       else if (f.type === 'bridge') c.props.push({ t: PROP.bridge, x: f.x, y: f.h0 - 0.14, z: f.z, yaw, s: 1 });
     });
 
+    // Signature road-bridge decks owned by this chunk.
+    const near = this.gen.nearestMountain(ox + CHUNK_SIZE / 2, oz + CHUNK_SIZE / 2, 1);
+    if (near && near.bridgePts) {
+      for (const bp of near.bridgePts) {
+        if (bp.x >= ox && bp.x < ox + CHUNK_SIZE && bp.z >= oz && bp.z < oz + CHUNK_SIZE) {
+          c.props.push({ t: PROP.bridge, x: bp.x, y: bp.h0 - 0.16, z: bp.z,
+            yaw: Math.atan2(bp.dx, bp.dz), s: 1.3 });
+        }
+      }
+    }
+
     // Summit markers: a prayer-flag pole + small chorten beside the peak of
     // any mountain destination whose summit lies in this chunk.
     const summit = this.gen.summitAt(ox + CHUNK_SIZE / 2, oz + CHUNK_SIZE / 2, CHUNK_SIZE);
     if (summit && summit.x >= ox && summit.x < ox + CHUNK_SIZE &&
         summit.z >= oz && summit.z < oz + CHUNK_SIZE) {
-      const fy = this.gen.height(summit.x + 7, summit.z);
-      c.props.push({ t: PROP.flagpole, x: summit.x + 7, y: fy - 0.1, z: summit.z, yaw: 0.6, s: 1 });
-      const sy = this.gen.height(summit.x - 6, summit.z + 4);
-      c.props.push({ t: PROP.stupa, x: summit.x - 6, y: sy - 0.15, z: summit.z + 4, yaw: 2.1, s: 1 });
-      c.colliders.push({ x: summit.x - 6, z: summit.z + 4, r: 1.1 });
+      const mark = (t, dx, dz, yaw, s2 = 1, collR = 0) => {
+        const y = this.gen.height(summit.x + dx, summit.z + dz);
+        c.props.push({ t, x: summit.x + dx, y: y - 0.12, z: summit.z + dz, yaw, s: s2 });
+        if (collR) c.colliders.push({ x: summit.x + dx, z: summit.z + dz, r: collR });
+      };
+      const kind = summit.kind || 0;
+      if (kind === 1 || kind === 6) {
+        // Hero summits: chorten flanked by a line of prayer flags.
+        mark(PROP.stupa, -7, 4, 2.1, 1.25, 1.3);
+        mark(PROP.flagpole, 7, -1, 0.6);
+        mark(PROP.flagpole, 10, 4, 1.7);
+        mark(PROP.flagpole, 4, 9, 2.9);
+      } else if (kind === 3) {
+        // Rock peak: cairn of boulders.
+        mark(PROP.rock, 6, 2, 0.4, 1.6, 1.3);
+        mark(PROP.rock, 8, 5, 1.9, 1.1);
+        mark(PROP.rock, 4, 6, 3.1, 0.8);
+        mark(PROP.flagpole, -6, -3, 1.2);
+      } else if (kind === 5) {
+        // Village peak: shrine + haystack pair.
+        mark(PROP.stupa, -6, 4, 2.1, 1, 1.1);
+        mark(PROP.haystack, 7, 2, 0.8);
+        mark(PROP.wall, 4, -7, 1.2);
+      } else {
+        mark(PROP.flagpole, 7, 0, 0.6);
+        mark(PROP.stupa, -6, 4, 2.1, 1, 1.1);
+      }
     }
 
     // Micro-props: grass tufts, small stones, fallen branches. Denser and
@@ -303,14 +336,26 @@ export class ChunkManager {
       const wH = info.wH, wF = info.wF, wFa = info.wFa, wRk = info.wRk, wMnt = info.wMnt;
       const forestPatch = 0.45 + 1.1 * vnoise(x * 0.012 - 11.1, z * 0.012 + 8.8, this.gen.seed * 13 + 92);
       if (info.mtn > 0.04) {
-        const band = sstep(0.05, 0.15, info.mtn) * (1 - sstep(0.45, 0.6, info.mtn));
-        let acc = 1.0 * band * forestPatch + 0.08;
+        const ref = info.mtnRef;
+        const forestMul = ref && ref.forestMul !== undefined ? ref.forestMul : 1;
+        // Deep-forest kinds keep trees higher up the dome.
+        const bandTop = forestMul > 1.2 ? 0.72 : 0.45;
+        const band = sstep(0.05, 0.15, info.mtn) * (1 - sstep(bandTop, bandTop + 0.15, info.mtn));
+        let acc = 1.0 * band * forestPatch * forestMul + (ref && ref.barren ? 0.02 : 0.08);
         if (pick < acc && ny > 0.8) { t = PROP.pine; s = 0.8 + rng() * 0.7; collR = 0.5 * s; }
-        else if (pick < (acc += 0.5 * sstep(0.45, 0.65, info.mtn) + 0.05)) {
-          t = PROP.rock; s = 0.5 + rng() * 1.1; sink = 0.25 * s;
+        else if (pick < (acc += (0.5 + (ref && ref.rockBig ? 0.35 : 0)) * sstep(0.45, 0.65, info.mtn) + 0.05)) {
+          t = PROP.rock;
+          s = (0.5 + rng() * 1.1) * (ref && ref.rockBig ? 1.7 : 1);
+          sink = 0.25 * s;
           if (s > 0.75) collR = 0.85 * s;
         }
         else if (pick < (acc += 0.18 * band)) { t = PROP.bush; s = 0.7 + rng() * 0.8; }
+        else if (ref && ref.village && info.mtn > 0.05 && info.mtn < 0.3) {
+          // Kind-5 lower dome: terraced village life.
+          if (pick < acc + 0.05 && ny > 0.94) { t = PROP.house; collR = 2.4; sink = 0.2; }
+          else if (pick < acc + 0.15 && ny > 0.88) { t = PROP.haystack; s = 0.8 + rng() * 0.5; }
+          else if (pick < acc + 0.24 && ny > 0.85) { t = PROP.wall; s = 0.9 + rng() * 0.4; sink = 0.15; }
+        }
       } else {
       let acc = (0.78 * wF + 0.08 * wH) * forestPatch + 0.12 * wRk + 0.06 * wMnt;
       if (pick < acc && ny > 0.82) { t = PROP.pine; s = 0.8 + rng() * 0.7; collR = 0.5 * s; }
