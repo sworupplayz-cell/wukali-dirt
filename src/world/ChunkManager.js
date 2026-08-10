@@ -319,7 +319,10 @@ export class ChunkManager {
       if (!clearings) return false;
       for (const v of clearings) {
         const dx = x - v.x, dz = z - v.z;
-        if (dx * dx + dz * dz < v.r * v.r) return true;
+        // +22 m: keep the surrounding tree belt back from the houses so
+        // villages have open, rideable approaches (discoverability fix).
+        const rr = v.r + 22;
+        if (dx * dx + dz * dz < rr * rr) return true;
       }
       return false;
     };
@@ -343,15 +346,15 @@ export class ChunkManager {
     }
 
     // Phase 3L-1: corn fields — clumped rows on flat (non-terraced) farms.
-    for (let k2 = 0; k2 < 14 && c.props.length < MAX_PROPS_PER_CHUNK + 12; k2++) {
+    for (let k2 = 0; k2 < 20 && c.props.length < MAX_PROPS_PER_CHUNK + 12; k2++) {
       const x = ox + rng2() * CHUNK_SIZE;
       const z = oz + rng2() * CHUNK_SIZE;
       this.gen.sampleInfo(x, z, info);
-      if (info.wFa < 0.5 || info.terr > 0.25) continue;
+      if (info.wFa < 0.4 || info.terr > 0.3) continue;
       if (info.trail > 0.3 || info.stream > 0.15) continue;
       if (this.gen.nearFeature(x, z) || inClearing(x, z)) continue;
       const patch = vnoise(x * 0.03 + 21.4, z * 0.03 - 9.2, this.gen.seed * 13 + 93);
-      if (patch < 0.55) continue;
+      if (patch < 0.45) continue;
       // A short row of clumps reads as a planted field.
       const a = Math.round(vnoise(x * 0.008, z * 0.008, this.gen.seed + 7) * 4) * (Math.PI / 4);
       const dx = Math.cos(a), dz = Math.sin(a);

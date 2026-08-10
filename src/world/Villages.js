@@ -14,8 +14,8 @@ import { makeInfo } from './TerrainGenerator.js';
  * skipped, which keeps layouts organic. Forest cells get small hamlets
  * (2-3 houses in a clearing) instead.
  */
-const VCELL = 950;
-const VP = 0.55;
+const VCELL = 820;   // denser grid: rural life should be hard to MISS
+const VP = 0.8;
 const NAMES = ['Siddha Gaun', 'Suryodaya Gaun', 'Pipalbot', 'Laliguras Tole',
   'Danda Bazaar', 'Seti Khola Gaun', 'Bhalu Kharka', 'Chiya Tole',
   'Kagate Gaun', 'Milan Tole', 'Sallaghari', 'Dhunge Gaun'];
@@ -53,7 +53,7 @@ export class Villages {
   _build(cx, cz) {
     if (this._h(cx, cz, 1) > VP) return null;
     const gen = this.gen, info = this._info;
-    for (let c = 0; c < 3; c++) {
+    for (let c = 0; c < 4; c++) {
       const vx = (cx + 0.2 + 0.6 * this._h(cx, cz, 2 + c * 9)) * VCELL;
       const vz = (cz + 0.2 + 0.6 * this._h(cx, cz, 3 + c * 9)) * VCELL;
       gen.masksAt(vx, vz, info);
@@ -110,11 +110,43 @@ export class Villages {
           add('wall', x, z, this._h(cx, cz, 150 + i) * 6.28, 1 + this._h(cx, cz, 152 + i) * 0.3, 0.9, 0.18);
         }
       }
+      // Corn field beside the village: two visible rows of clumps make
+      // every settlement read as farmland (validated per clump).
+      if (!hamlet) {
+        const fa = this._h(cx, cz, 8) * Math.PI * 2;
+        const fx = vx + Math.cos(fa) * 34, fz = vz + Math.sin(fa) * 34;
+        const ra = fa + Math.PI / 2;
+        for (let row = 0; row < 2; row++) {
+          for (let i = 0; i < 5; i++) {
+            const x = fx + Math.cos(ra) * (i - 2) * 2.0 + Math.cos(fa) * row * 2.2;
+            const z = fz + Math.sin(ra) * (i - 2) * 2.0 + Math.sin(fa) * row * 2.2;
+            gen.masksAt(x, z, info);
+            if (info.trail > 0.35 || info.stream > 0.2 || !this._slopeOk(x, z, 0.8)) continue;
+            add('corn', x, z, this._h(cx, cz, 160 + row * 8 + i) * 6.28,
+              0.9 + this._h(cx, cz, 180 + row * 8 + i) * 0.3, 0, 0.05);
+          }
+        }
+      }
       const name = NAMES[Math.floor(this._h(cx, cz, 7) * NAMES.length)];
       return { id: `G${cx},${cz}`, name, x: vx, z: vz,
         r: hamlet ? 26 : 42, hamlet, items };
     }
     return null;
+  }
+
+  /** Nearest village to a point (spawn selection / debug). */
+  nearest(x, z, cells = 3) {
+    const c0x = Math.floor(x / VCELL), c0z = Math.floor(z / VCELL);
+    let best = null, bd = 1e9;
+    for (let dx = -cells; dx <= cells; dx++) {
+      for (let dz = -cells; dz <= cells; dz++) {
+        const v = this.cell(c0x + dx, c0z + dz);
+        if (!v) continue;
+        const d = Math.hypot(v.x - x, v.z - z);
+        if (d < bd) { bd = d; best = v; }
+      }
+    }
+    return best && { v: best, d: bd };
   }
 
   /** Villages whose footprint may touch a chunk (used by the scatter). */
@@ -152,7 +184,9 @@ export class Villages {
     }
     for (const v of this._nearby) {
       if (v.found) continue;
-      if (Math.hypot(px - v.x, pz - v.z) < v.r + 18) {
+      // Sight-distance trigger: the name greets the rider as the houses
+      // emerge from the haze, not only after threading between them.
+      if (Math.hypot(px - v.x, pz - v.z) < v.r + 60) {
         v.found = true;
         return v;
       }

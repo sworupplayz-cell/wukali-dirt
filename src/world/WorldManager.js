@@ -128,15 +128,19 @@ export class WorldManager {
     return out;
   }
 
-  /** Deterministic spawn: nearest gentle trail point to the origin. */
+  /** Deterministic spawn: a gentle lowland trail point near the origin,
+   *  preferring one within riding distance of a village (Phase 3L-1 fix:
+   *  rural content must be encountered during normal exploration — close
+   *  enough to reach in a minute, far enough to require actually riding). */
   getSpawn() {
     if (this._spawn) return this._spawn;
     const gen = this.generator;
     const info = makeInfo();
-    let best = { x: 0, z: 0 };
-    let fallback = null;
+    let best = null;
+    let good = null;      // valid trail point without a nearby village
+    let fallback = null;  // any rideable trail point at all
     outer:
-    for (let r = 0; r <= 1000; r += 8) {
+    for (let r = 0; r <= 1600; r += 8) {
       const steps = Math.max(1, Math.round((r * 6.28) / 14));
       for (let k = 0; k < steps; k++) {
         const a = (k / steps) * Math.PI * 2;
@@ -148,11 +152,15 @@ export class WorldManager {
         if (slope > 1.2 || gen.nearFeature(x, z)) continue;
         if (!fallback) fallback = { x, z };
         if (info.lo < 0.85) continue; // start deep in the green lowlands
-        best = { x, z };
-        break outer;
+        if (!good) good = { x, z };
+        const near = this.villages.nearest(x, z, 2);
+        if (near && near.d > 140 && near.d < 520) {
+          if (!near.v.hamlet) { best = { x, z }; break outer; } // full village wins
+          if (!this._hamSpawn) this._hamSpawn = { x, z };
+        }
       }
-      if (r === 1000 && fallback) best = fallback;
     }
+    best = best || this._hamSpawn || good || fallback || { x: 0, z: 0 };
     const dir = gen._trailDir(best.x, best.z);
     this._spawn = {
       x: best.x,
