@@ -231,7 +231,7 @@ function check(name, ok, detail = '') {
   const ramp = await page.evaluate(() => {
     const g = window.__game;
     const sp = g.world.getSpawn(); // deterministic reference point
-    const f = g.world.findFeature('ramp', sp.x, sp.z, 30);
+    const f = g.world.findFeature('ramp', sp.x, sp.z, 60); // spawn tiers (3L-3) can sit in farm regions; ramps stay rare by design
     return f && { x: f.x, z: f.z, dx: f.dx, dz: f.dz };
   });
   check('Stunt ramps generate (controlled rarity)', !!ramp);
@@ -324,7 +324,7 @@ function check(name, ok, detail = '') {
     const n = { set(x, y, z) { this.y = y; }, normalize() { return this; } };
     for (const c of g.world.getColliders()) {
       if (c.r < 0.5) continue; // want a solid tree/rock, not a pole
-      const ax = c.x, az = c.z - 10; // approach from the south
+      const ax = c.x, az = c.z - 15; // approach run-up (houses have fat colliders)
       const e = 3;
       const dh = Math.abs(g.world.getHeight(ax, az + e) - g.world.getHeight(ax, az - e)) +
                  Math.abs(g.world.getHeight(ax + e, az) - g.world.getHeight(ax - e, az));
@@ -335,7 +335,7 @@ function check(name, ok, detail = '') {
   if (tree) {
     await page.evaluate((c) => {
       const g = window.__game;
-      const sx = c.x, sz = c.z - 10;
+      const sx = c.x, sz = c.z - 15;
       g.bike._placeAt(sx, g.world.getHeight(sx, sz), sz, Math.atan2(c.x - sx, c.z - sz));
       g.followCam.snapTo(g.bike);
     }, tree);

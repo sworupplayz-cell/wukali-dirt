@@ -33,11 +33,12 @@ const SKIRT = 3;       // skirt depth (m)
 const MAX_PROPS_PER_CHUNK = 44;
 
 export class ChunkManager {
-  constructor(scene, generator, villages = null, towns = null) {
+  constructor(scene, generator, villages = null, towns = null, cities = null) {
     this.scene = scene;
     this.gen = generator;
     this.villages = villages;
     this.towns = towns;
+    this.cities = cities;
     this.chunks = new Map();       // key -> chunk record
     this.queue = [];               // keys awaiting mesh build
     this.activeColliders = [];
@@ -309,14 +310,17 @@ export class ChunkManager {
         (clearings = clearings || []).push(v);
         for (const it of v.items) {
           if (it.x < ox || it.x >= ox + CHUNK_SIZE || it.z < oz || it.z >= oz + CHUNK_SIZE) continue;
-          c.props.push({ t: PROP[it.type], x: it.x, y: this.gen.height(it.x, it.z) - it.sink,
-            z: it.z, yaw: it.yaw, s: it.s });
+          const prop = { t: PROP[it.type], x: it.x, y: this.gen.height(it.x, it.z) - it.sink,
+            z: it.z, yaw: it.yaw, s: it.s };
+          if (it.rx) prop.rx = it.rx; // terrain-pitched strips (city streets)
+          c.props.push(prop);
           if (it.collR > 0) c.colliders.push({ x: it.x, z: it.z, r: it.collR * it.s });
         }
       }
     };
     if (this.villages) inject(this.villages.forChunk(ox, oz, CHUNK_SIZE));
     if (this.towns) inject(this.towns.forChunk(ox, oz, CHUNK_SIZE));
+    if (this.cities) inject(this.cities.forChunk(ox, oz, CHUNK_SIZE));
     const inClearing = (x, z) => {
       if (!clearings) return false;
       for (const v of clearings) {

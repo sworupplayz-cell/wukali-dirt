@@ -483,6 +483,91 @@ function marketStall() {
   ]);
 }
 
+// ---- Phase 3L-3: city buildings, streets and landmarks --------------------
+
+function cityBuildingA() {
+  // 4-storey concrete block: cream body, blue balcony bands, roof tank.
+  const parts = [colorize(new THREE.BoxGeometry(4.2, 8.4, 3.6), 0.85, 0.82, 0.74).translate(0, 4.2, 0)];
+  for (let f = 0; f < 4; f++) {
+    parts.push(colorize(new THREE.BoxGeometry(4.4, 0.14, 1.1), 0.4, 0.55, 0.7)
+      .translate(0, 2.0 + f * 2.0, 1.6));
+    for (let w = 0; w < 3; w++) {
+      parts.push(colorize(new THREE.BoxGeometry(0.75, 0.9, 0.08), 0.16, 0.2, 0.26)
+        .translate(-1.3 + w * 1.3, 1.5 + f * 2.0, 1.82));
+    }
+  }
+  parts.push(colorize(new THREE.CylinderGeometry(0.45, 0.45, 0.8, 7), 0.15, 0.15, 0.17).translate(1.2, 8.8, -0.8));
+  parts.push(colorize(new THREE.BoxGeometry(4.4, 0.18, 3.8), 0.55, 0.53, 0.5).translate(0, 8.5, 0));
+  return merge(parts);
+}
+
+function cityBuildingB() {
+  // 5-storey brick-red tower with white floor bands and shopfront base.
+  const parts = [colorize(new THREE.BoxGeometry(3.8, 10.0, 3.4), 0.62, 0.34, 0.26).translate(0, 5.0, 0)];
+  for (let f = 1; f < 5; f++) {
+    parts.push(colorize(new THREE.BoxGeometry(3.95, 0.22, 3.55), 0.9, 0.88, 0.82).translate(0, f * 2.0, 0));
+  }
+  parts.push(colorize(new THREE.BoxGeometry(3.0, 1.7, 0.15), 0.1, 0.1, 0.12).translate(0, 0.9, 1.72));
+  parts.push(colorize(new THREE.BoxGeometry(3.4, 0.5, 0.08), 0.95, 0.75, 0.2).translate(0, 2.1, 1.76));
+  parts.push(colorize(new THREE.BoxGeometry(3.9, 0.16, 3.5), 0.5, 0.48, 0.46).translate(0, 10.1, 0));
+  return merge(parts);
+}
+
+function pagodaTemple() {
+  // Landmark pagoda: three stacked roofs on a red base (Nepal style).
+  const parts = [
+    colorize(new THREE.BoxGeometry(5.2, 0.8, 5.2), 0.75, 0.72, 0.66).translate(0, 0.4, 0),
+    colorize(new THREE.BoxGeometry(3.6, 2.4, 3.6), 0.6, 0.25, 0.2).translate(0, 2.0, 0),
+    colorize(new THREE.ConeGeometry(3.6, 1.5, 4), 0.45, 0.3, 0.15).rotateY(Math.PI / 4).translate(0, 3.9, 0),
+    colorize(new THREE.BoxGeometry(2.4, 1.7, 2.4), 0.6, 0.25, 0.2).translate(0, 5.2, 0),
+    colorize(new THREE.ConeGeometry(2.6, 1.3, 4), 0.45, 0.3, 0.15).rotateY(Math.PI / 4).translate(0, 6.5, 0),
+    colorize(new THREE.BoxGeometry(1.4, 1.3, 1.4), 0.6, 0.25, 0.2).translate(0, 7.5, 0),
+    colorize(new THREE.ConeGeometry(1.6, 1.2, 4), 0.85, 0.68, 0.28).rotateY(Math.PI / 4).translate(0, 8.6, 0),
+    colorize(new THREE.ConeGeometry(0.3, 0.9, 4), 0.9, 0.75, 0.3).translate(0, 9.6, 0),
+  ];
+  return merge(parts);
+}
+
+function standSegment() {
+  // Stadium stand tier: three stepped concrete rows (arranged in an oval).
+  const parts = [];
+  for (let i = 0; i < 3; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(11, 0.7, 1.3), 0.72, 0.7, 0.66)
+      .translate(0, 0.35 + i * 0.7, -i * 1.2));
+  }
+  parts.push(colorize(new THREE.BoxGeometry(11, 0.25, 0.5), 0.3, 0.5, 0.7).translate(0, 2.35, -2.4));
+  return merge(parts);
+}
+
+function roadSegment() {
+  // Side-street surface: dark gravel strip (no collider, terrain-hugging).
+  const parts = [
+    colorize(new THREE.BoxGeometry(5.2, 0.09, 8.4), 0.34, 0.33, 0.32),
+    colorize(new THREE.BoxGeometry(0.5, 0.1, 8.4), 0.55, 0.53, 0.5).translate(2.7, 0.005, 0),
+    colorize(new THREE.BoxGeometry(0.5, 0.1, 8.4), 0.55, 0.53, 0.5).translate(-2.7, 0.005, 0),
+  ];
+  return merge(parts);
+}
+
+function roadSign() {
+  // Small blue road sign on a pole.
+  return merge([
+    colorize(new THREE.CylinderGeometry(0.05, 0.06, 2.4, 5), 0.5, 0.5, 0.52).translate(0, 1.2, 0),
+    colorize(new THREE.BoxGeometry(1.1, 0.55, 0.06), 0.15, 0.35, 0.7).translate(0, 2.35, 0),
+    colorize(new THREE.BoxGeometry(0.9, 0.1, 0.07), 0.9, 0.9, 0.9).translate(0, 2.35, 0.01),
+  ]);
+}
+
+function parkingLot() {
+  // Parking pad: light gravel with painted bays (future traffic-ready).
+  const parts = [colorize(new THREE.BoxGeometry(11, 0.08, 7), 0.5, 0.48, 0.45)];
+  for (let i = 0; i < 4; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(0.15, 0.09, 3), 0.85, 0.85, 0.82)
+      .translate(-4 + i * 2.6, 0.005, -1.5));
+  }
+  return merge(parts);
+}
+
 export const PROP_TYPES = [
   { name: 'pine', build: pine, max: 800 },
   { name: 'tree', build: broadleaf, max: 420 },
@@ -524,6 +609,14 @@ export const PROP_TYPES = [
   { name: 'fuel', build: fuelStation, max: 10 },
   { name: 'pole', build: utilityPole, max: 90 },
   { name: 'stall', build: marketStall, max: 60 },
+  // Phase 3L-3 city pieces.
+  { name: 'cityA', build: cityBuildingA, max: 46 },
+  { name: 'cityB', build: cityBuildingB, max: 46 },
+  { name: 'pagoda', build: pagodaTemple, max: 6 },
+  { name: 'stand', build: standSegment, max: 16 },
+  { name: 'roadseg', build: roadSegment, max: 130 },
+  { name: 'roadsign', build: roadSign, max: 40 },
+  { name: 'parklot', build: parkingLot, max: 12 },
 ];
 
 export const PROP = {};

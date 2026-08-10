@@ -250,6 +250,11 @@ export class Game {
           const res = this.achievements.discover(t.id, t.name);
           if (res && this.onDiscover) this.onDiscover({ ...res, type: 'town' });
         }
+        const cy = this.world.cities.update(this.bike.position.x, this.bike.position.z, frameDt);
+        if (cy) {
+          const res = this.achievements.discover(cy.id, cy.name);
+          if (res && this.onDiscover) this.onDiscover({ ...res, type: 'city' });
+        }
       }
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(

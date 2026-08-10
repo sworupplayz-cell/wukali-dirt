@@ -6,6 +6,7 @@ import { Mountains } from './Mountains.js';
 import { MountainImpostors } from './MountainImpostors.js';
 import { Villages } from './Villages.js';
 import { Towns } from './Towns.js';
+import { Cities } from './Cities.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -23,7 +24,8 @@ export class WorldManager {
     this._buildLighting(scene);
     this.villages = new Villages(this.generator);
     this.towns = new Towns(this.generator, this.villages);
-    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns);
+    this.cities = new Cities(this.generator, this.villages, this.towns);
+    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns, this.cities);
     this.mountains = new Mountains(scene, seed);
     this.impostors = new MountainImpostors(scene, this.generator);
     this._n = new THREE.Vector3();
@@ -142,7 +144,7 @@ export class WorldManager {
     let good = null;      // valid trail point without a nearby village
     let fallback = null;  // any rideable trail point at all
     outer:
-    for (let r = 0; r <= 1600; r += 8) {
+    for (let r = 0; r <= 2600; r += 8) {
       const steps = Math.max(1, Math.round((r * 6.28) / 14));
       for (let k = 0; k < steps; k++) {
         const a = (k / steps) * Math.PI * 2;
@@ -161,13 +163,19 @@ export class WorldManager {
         const tOk = nearT && nearT.d > 350 && nearT.d < 1100;
         // Best spawn: a town a short road ride away AND a village nearby;
         // then town-only; then village-only (Phase 3L-2 discoverability).
-        if (tOk && vOk) { best = { x, z }; break outer; }
+        // Phase 3L-3: among town-tier candidates, prefer one whose region
+        // also holds a CITY within a few km of road riding.
+        if (tOk && vOk) {
+          const nc = this.cities.nearest(x, z, 1);
+          if (nc && nc.d < 3000) { best = { x, z }; break outer; }
+          if (!this._tvSpawn) this._tvSpawn = { x, z };
+        }
         if (tOk && !this._townSpawn) this._townSpawn = { x, z };
         if (vOk && !this._vilSpawn) this._vilSpawn = { x, z };
         if (nearV && nearV.d > 140 && nearV.d < 520 && !this._hamSpawn) this._hamSpawn = { x, z };
       }
     }
-    best = best || this._townSpawn || this._vilSpawn || this._hamSpawn || good || fallback || { x: 0, z: 0 };
+    best = best || this._tvSpawn || this._townSpawn || this._vilSpawn || this._hamSpawn || good || fallback || { x: 0, z: 0 };
     const dir = gen._trailDir(best.x, best.z);
     this._spawn = {
       x: best.x,
