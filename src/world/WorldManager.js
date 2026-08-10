@@ -155,14 +155,19 @@ export class WorldManager {
         if (!fallback) fallback = { x, z };
         if (info.lo < 0.85) continue; // start deep in the green lowlands
         if (!good) good = { x, z };
-        const near = this.villages.nearest(x, z, 2);
-        if (near && near.d > 140 && near.d < 520) {
-          if (!near.v.hamlet) { best = { x, z }; break outer; } // full village wins
-          if (!this._hamSpawn) this._hamSpawn = { x, z };
-        }
+        const nearV = this.villages.nearest(x, z, 2);
+        const vOk = nearV && nearV.d > 140 && nearV.d < 520 && !nearV.v.hamlet;
+        const nearT = this.towns.nearest(x, z, 1);
+        const tOk = nearT && nearT.d > 350 && nearT.d < 1100;
+        // Best spawn: a town a short road ride away AND a village nearby;
+        // then town-only; then village-only (Phase 3L-2 discoverability).
+        if (tOk && vOk) { best = { x, z }; break outer; }
+        if (tOk && !this._townSpawn) this._townSpawn = { x, z };
+        if (vOk && !this._vilSpawn) this._vilSpawn = { x, z };
+        if (nearV && nearV.d > 140 && nearV.d < 520 && !this._hamSpawn) this._hamSpawn = { x, z };
       }
     }
-    best = best || this._hamSpawn || good || fallback || { x: 0, z: 0 };
+    best = best || this._townSpawn || this._vilSpawn || this._hamSpawn || good || fallback || { x: 0, z: 0 };
     const dir = gen._trailDir(best.x, best.z);
     this._spawn = {
       x: best.x,

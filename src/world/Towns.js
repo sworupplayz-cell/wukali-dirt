@@ -11,8 +11,8 @@ import { makeInfo } from './TerrainGenerator.js';
  * the roadside. Everything renders through the existing chunk scatter /
  * instancing / collider pipeline, exactly like Villages.
  */
-const TCELL = 2400;
-const TP = 0.8;
+const TCELL = 2000;   // discoverability fix: towns every ~2 km of country
+const TP = 0.85;
 const NAMES = ['Seti Bazaar', 'Pipal Chowk', 'Suryodaya Bazaar', 'Kali Khola Bazaar',
   'Janajyoti Tole', 'Bhimsen Chowk', 'Naya Bazaar', 'Buddha Chowk',
   'Himal Bazaar', 'Gorkha Chowk', 'Machhapuchhre Tole', 'Annapurna Chowk'];
@@ -94,11 +94,11 @@ export class Towns {
       };
 
       // Bazaar strip: shops/stalls/teashops flanking the road (never on it).
-      const shops = 8 + Math.floor(this._h(cx, cz, 4) * 5);
+      const shops = 10 + Math.floor(this._h(cx, cz, 4) * 6);
       let placedShops = 0;
-      for (let i = 0; i < shops + 6 && placedShops < shops; i++) {
-        const along = (this._h(cx, cz, 10 + i) - 0.5) * 120;
-        const side = this._h(cx, cz, 30 + i) < 0.5 ? 1 : -1;
+      for (let i = 0; i < shops + 8 && placedShops < shops; i++) {
+        const along = (this._h(cx, cz, 10 + i) - 0.5) * 130;
+        const side = i % 2 === 0 ? 1 : -1; // both flanks always build up
         const off = side * (8.5 + this._h(cx, cz, 50 + i) * 2.5);
         const x = tx + rdx * along + pdx * off;
         const z = tz + rdz * along + pdz * off;
