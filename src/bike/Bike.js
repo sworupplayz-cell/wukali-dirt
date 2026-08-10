@@ -63,6 +63,9 @@ export class Bike {
     this._bumpPhase = 0;
     this.suspension = 0;     // visual spring value
     this._suspVel = 0;
+    this._brakeEff = 0;      // smoothed brake force (SP-1: no grab on tap)
+    this._stillT = 0;        // time at standstill with brake held (reverse delay)
+    this.weightPitch = 0;    // accel squat / brake dive (SP-1, orientation only)
     this._safeTimer = 0;
     this._safe = { x: 0, y: 0, z: 0, yaw: 0 };
     this.heightAboveGround = 0;
@@ -103,6 +106,9 @@ export class Bike {
     this.crashTimer = 0;
     this.suspension = 0;
     this._suspVel = 0;
+    this._brakeEff = 0;
+    this._stillT = 0;
+    this.weightPitch = 0;
     this._safeTimer = 0;
     this.slip = 0;
     this.surface.grip = 1; this.surface.drag = 0; this.surface.rough = 0;
@@ -159,6 +165,8 @@ export class Bike {
     this.wheelSpin += (this.speed / 0.34) * dt;
     this.slipSpin += this.slip * 55 * dt; // extra rear-wheel spin while traction breaks
     this.heightAboveGround = this.position.y - world.getHeight(this.position.x, this.position.z);
+    if (!Number.isFinite(this.speed)) this.speed = 0; // physics-explosion failsafe
+    if (!Number.isFinite(this.position.y)) this.reset();
 
     // Out of the test area: snap back to safety (Phase 2 world removes this).
     if (!world.isInBounds(this.position.x, this.position.z) || this.position.y < -30) {
@@ -181,14 +189,29 @@ export class Bike {
     const slopeGrip = 1 - 0.75 * Math.min(1, Math.max(0, (climb - 0.55) / 0.3));
     const grip = slopeGrip * this.surface.grip;
     this.slip = 0;
+    // SP-1: brake force ramps in over ~0.12 s so a tap slows instead of
+    // grabbing; reverse needs a deliberate ~0.35 s hold through the final
+    // skid (no more surprise backward creep when stopping hard, but wedge
+    // recovery stays quick).
+    this._brakeEff += (brake - this._brakeEff) * Math.min(1, 9 * dt);
+    if (Math.abs(this.speed) < 1.5 && brake > 0) this._stillT += dt;
+    else this._stillT = 0;
     if (throttle > 0) {
-      this.speed += ACCEL * grip * Math.max(0, 1 - Math.max(this.speed, 0) / MAX_SPEED) * throttle * dt;
+      // SP-1 torque curve: fuller midrange pull, same top speed — the
+      // linear taper left the bike breathless between 15 and 25 m/s.
+      // Exponent 1.25 keeps casual off-road cruising near the old pace.
+      const vN = Math.max(this.speed, 0) / MAX_SPEED;
+      this.speed += ACCEL * grip * Math.max(0, 1 - Math.pow(vN, 1.25)) * throttle * dt;
       this.slip = throttle * (1 - Math.min(1, grip)); // rear wheel overspin (visual)
     } else if (brake > 0) {
       // Braking bites a little softer on loose/wet ground.
       const bite = 0.7 + 0.3 * this.surface.grip;
-      if (this.speed > 0.3) this.speed -= BRAKE_DECEL * bite * brake * dt;
-      else this.speed = Math.max(this.speed - REVERSE_ACCEL * brake * dt, MAX_REVERSE);
+      if (this.speed > 0.3) this.speed -= BRAKE_DECEL * bite * this._brakeEff * dt;
+      else if (this._stillT > 0.35 || this.speed < -0.3) {
+        this.speed = Math.max(this.speed - REVERSE_ACCEL * brake * dt, MAX_REVERSE);
+      } else {
+        this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), BRAKE_DECEL * dt);
+      }
     } else {
       // Coast: engine braking + rolling friction. The proportional decay
       // fades out on real descents so gravity can pull the bike downhill
@@ -220,7 +243,7 @@ export class Bike {
     // slightly on low-grip surfaces (kept subtle — fun over simulation).
     // STUNT: the rider actively works the bike — cornering bites harder.
     const turnFactor =
-      Math.max(-1, Math.min(1, this.speed / 4)) / (1 + Math.abs(this.speed) * 0.025);
+      Math.max(-1, Math.min(1, this.speed / 4)) / (1 + Math.abs(this.speed) * 0.03);
     this.yaw -= this.steer * 2.1 * turnFactor * (0.72 + 0.28 * this.surface.grip) *
       (1 + 0.25 * stunt) * dt;
 
@@ -293,12 +316,19 @@ export class Bike {
       this.groundPitch = Math.max(-0.26, this.groundPitch - 2.0 * dt);
     } else if (!this.crashed && stunt > 0 && this.speed > 2.5) {
       this.groundPitch = Math.min(0.45, this.groundPitch + (1.1 + 0.7 * throttle) * dt);
-    } else if (!this.crashed && brake > 0.85 && this.speed > 6) {
-      this.groundPitch += (-0.07 - this.groundPitch) * Math.min(1, 6 * dt); // cosmetic dive
     } else {
       this.groundPitch -=
         Math.sign(this.groundPitch) * Math.min(Math.abs(this.groundPitch), 2.6 * dt);
     }
+    // SP-1 weight transfer: a separate, small orientation-only pitch —
+    // throttle lightens the front (squat), braking loads the fork (dive),
+    // proportional to actual force and speed. Lives on its OWN field so
+    // stunt detection thresholds (groundPitch) never see it.
+    const wt = (throttle > 0 && stunt === 0
+        ? 0.05 * throttle * Math.min(1, Math.max(this.speed, 0) / 5)
+        : 0) -
+      0.09 * this._brakeEff * Math.min(1, Math.abs(this.speed) / 8);
+    this.weightPitch += (wt - this.weightPitch) * Math.min(1, 6 * dt);
     // Ramp prep: holding STUNT preloads the suspension (~10 cm crouch);
     // the existing takeoff pop converts it into a slightly bigger launch.
     if (stunt > 0) this._suspVel -= 6 * dt;
@@ -307,6 +337,8 @@ export class Bike {
   _airStep(dt, throttle, brake, stunt = 0, trick = 0) {
     const prevX = this.position.x, prevZ = this.position.z, prevYair = this.position.y;
     this.velocity.y -= G * dt;
+    if (this.velocity.y < -45) this.velocity.y = -45; // terminal fall speed
+    this.weightPitch *= 1 - Math.min(1, 5 * dt);      // no squat/dive mid-air
     this.position.addScaledVector(this.velocity, dt);
 
     // TRICK button (Phase 3I-5): the ONLY way to flip. Committed rotation
@@ -390,7 +422,7 @@ export class Bike {
       if (this.velocity.y < CRASH_LAND_VY && Math.abs(this.airPitch) > CRASH_LAND_PITCH) {
         this._crash();
       }
-      this._suspVel += THREE.MathUtils.clamp(this.velocity.y * 0.25, -3.5, 0);
+      this._suspVel += THREE.MathUtils.clamp(this.velocity.y * 0.25, -5, 0);
       this.velocity.set(0, 0, 0);
     }
   }
@@ -446,7 +478,7 @@ export class Bike {
     // Critically-damped-ish spring for the visual chassis bob.
     const k = 60, damp = 9;
     this._suspVel += (-this.suspension * k - this._suspVel * damp) * dt;
-    this.suspension = THREE.MathUtils.clamp(this.suspension + this._suspVel * dt, -0.14, 0.1);
+    this.suspension = THREE.MathUtils.clamp(this.suspension + this._suspVel * dt, -0.18, 0.1);
   }
 
   _updateOrientation(dt) {
@@ -469,8 +501,9 @@ export class Bike {
     _m.makeBasis(_v2, this.groundNormal, _v1);
     this.quaternion.setFromRotationMatrix(_m);
 
-    // Local lean (steer + crash tip) and pitch (airborne + ground stunts).
-    const pitch = this.airPitch + this.groundPitch;
+    // Local lean (steer + crash tip) and pitch (airborne + ground stunts +
+    // SP-1 weight transfer).
+    const pitch = this.airPitch + this.groundPitch + this.weightPitch;
     _qLean.setFromAxisAngle(_axisZ, this.roll + this.crashRoll);
     _qPitch.setFromAxisAngle(_axisX, -pitch);
     this.quaternion.multiply(_qPitch).multiply(_qLean);
