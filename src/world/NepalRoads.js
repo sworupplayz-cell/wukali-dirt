@@ -68,11 +68,67 @@ export class NepalRoads {
         if (pts.length) legPts.shift(); // join without duplicate node
         pts.push(...legPts);
       }
-      this.routes.push({ id: d.id, kind: d.kind, w: d.w, pts });
-      for (let i = 0; i < pts.length - 1; i++) this._addSeg(pts[i], pts[i + 1], d.w);
+      // W-3F: densify/smooth sharp corners (hairpin apexes) with one
+      // Chaikin corner-cut pass — smoother switchbacks, finer node spacing.
+      const sm = this._smooth(pts);
+      this.routes.push({ id: d.id, kind: d.kind, w: d.w, pts: sm });
+      for (let i = 0; i < sm.length - 1; i++) this._addSeg(sm[i], sm[i + 1], d.w);
     }
+    // W-3F: bridge deck pins (registered later by NepalRoadside).
+    this.bridges = [];
+    this._bgrid = new Map();
     // Per-sample query cache (one query serves trail mask + macro bench).
-    this._q = { x: NaN, z: NaN, mask: 0, shelf: 0, centerH: 0 };
+    this._q = { x: NaN, z: NaN, mask: 0, shelf: 0, centerH: 0, deck: 0, deckH: 0 };
+  }
+
+  /** One corner-cutting pass on sharp corners only (W-3F). */
+  _smooth(pts) {
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+      const d1x = b.x - a.x, d1z = b.z - a.z, d2x = c.x - b.x, d2z = c.z - b.z;
+      const l1 = Math.hypot(d1x, d1z) || 1, l2 = Math.hypot(d2x, d2z) || 1;
+      const dot = (d1x * d2x + d1z * d2z) / (l1 * l2);
+      if (dot < 0.86) { // corner sharper than ~30°: cut it
+        const p1 = { x: b.x - d1x * 0.3, z: b.z - d1z * 0.3 };
+        const p2 = { x: b.x + d2x * 0.3, z: b.z + d2z * 0.3 };
+        p1.h = this._h(p1.x, p1.z);
+        p2.h = this._h(p2.x, p2.z);
+        // Only accept the cut if it doesn't steepen the climb (cutting a
+        // hairpin apex can shortcut ACROSS the slope the hairpin avoids).
+        const gCut = Math.abs(p2.h - p1.h) / (Math.hypot(p2.x - p1.x, p2.z - p1.z) || 1);
+        const gOld = Math.max(Math.abs(b.h - a.h) / l1, Math.abs(c.h - b.h) / l2);
+        if (gCut <= gOld + 0.02) {
+          out.push(p1, p2);
+        } else {
+          out.push(b); // keep the true hairpin apex
+        }
+      } else {
+        out.push(b);
+      }
+    }
+    out.push(pts[pts.length - 1]);
+    return out;
+  }
+
+  /** Register bridge decks (terrain pins; W-3F). {x,z,dx,dz,len,deckH} */
+  addBridges(list) {
+    this.bridges = list;
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      const m = b.len * 0.5 + 30;
+      const x0 = Math.floor((b.x - m) / CELL), x1 = Math.floor((b.x + m) / CELL);
+      const z0 = Math.floor((b.z - m) / CELL), z1 = Math.floor((b.z + m) / CELL);
+      for (let cx = x0; cx <= x1; cx++) {
+        for (let cz = z0; cz <= z1; cz++) {
+          const key = cx * 100003 + cz;
+          let arr = this._bgrid.get(key);
+          if (!arr) this._bgrid.set(key, (arr = []));
+          arr.push(i);
+        }
+      }
+    }
+    this._q.x = NaN; // invalidate the sample cache
   }
 
   _p(u, v) {
@@ -137,28 +193,44 @@ export class NepalRoads {
     }
   }
 
-  /** Distance query with per-sample cache: trail mask + macro road bench. */
+  /** Distance query with per-sample cache: trail mask + macro road bench +
+   *  bridge deck pin (W-3F). */
   query(x, z) {
     const q = this._q;
     if (q.x === x && q.z === z) return q;
-    q.x = x; q.z = z; q.mask = 0; q.shelf = 0; q.centerH = 0;
+    q.x = x; q.z = z; q.mask = 0; q.shelf = 0; q.centerH = 0; q.deck = 0; q.deckH = 0;
     const key = Math.floor(x / CELL) * 100003 + Math.floor(z / CELL);
     const arr = this._grid.get(key);
-    if (!arr) return q;
-    let bd = Infinity, bH = 0, bw = 5;
-    for (let i = 0; i < arr.length; i++) {
-      const s = this._segs[arr[i]];
-      const apx = x - s.ax, apz = z - s.az;
-      let t = (apx * (s.bx - s.ax) + apz * (s.bz - s.az)) / s.len2;
-      if (t < 0) t = 0; else if (t > 1) t = 1;
-      const dx = apx - (s.bx - s.ax) * t, dz = apz - (s.bz - s.az) * t;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < bd) { bd = d2; bH = s.hA + (s.hB - s.hA) * t; bw = s.w; }
+    if (arr) {
+      let bd = Infinity, bH = 0, bw = 5;
+      for (let i = 0; i < arr.length; i++) {
+        const s = this._segs[arr[i]];
+        const apx = x - s.ax, apz = z - s.az;
+        let t = (apx * (s.bx - s.ax) + apz * (s.bz - s.az)) / s.len2;
+        if (t < 0) t = 0; else if (t > 1) t = 1;
+        const dx = apx - (s.bx - s.ax) * t, dz = apz - (s.bz - s.az) * t;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bd) { bd = d2; bH = s.hA + (s.hB - s.hA) * t; bw = s.w; }
+      }
+      const d = Math.sqrt(bd);
+      q.mask = sstep(bw + 2.4, bw * 0.5, d);
+      q.shelf = sstep(bw + 17, bw * 0.75, d);
+      q.centerH = bH;
     }
-    const d = Math.sqrt(bd);
-    q.mask = sstep(bw + 2.4, bw * 0.5, d);
-    q.shelf = sstep(bw + 17, bw * 0.75, d);
-    q.centerH = bH;
+    const barr = this._bgrid.get(key);
+    if (barr) {
+      for (let i = 0; i < barr.length; i++) {
+        const b = this.bridges[barr[i]];
+        const rx = x - b.x, rz = z - b.z;
+        const u = rx * b.dx + rz * b.dz;      // along the road
+        const v = -rx * b.dz + rz * b.dx;     // across the road
+        const half = b.len * 0.5;
+        if (Math.abs(u) < half + 9 && Math.abs(v) < 5.5) {
+          const e = sstep(half + 8, half - 2, Math.abs(u)) * sstep(5.2, 3.4, Math.abs(v));
+          if (e > q.deck) { q.deck = e; q.deckH = b.deckH; }
+        }
+      }
+    }
     return q;
   }
 }

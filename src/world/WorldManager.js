@@ -12,6 +12,7 @@ import { Population } from './Population.js';
 import { NepalMacro } from './NepalTerrain.js';
 import { NepalWater } from './NepalWater.js';
 import { NepalRoads } from './NepalRoads.js';
+import { NepalRoadside } from './NepalRoadside.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -44,7 +45,11 @@ export class WorldManager {
     this.population = new Population(scene, this.generator, this.villages, this.towns, this.cities, this.industry);
     // Phase W-3D: rivers/lakes/streams water layer (nepal mode only).
     this.water = this.nepalMode ? new NepalWater(scene, this.generator.macro, this.generator) : null;
-    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns, this.cities, this.industry, this.water);
+    // Phase W-3F: bridges + roadside infrastructure along the network.
+    this.roadside = this.nepalMode
+      ? new NepalRoadside(this.generator, this.generator.macro, this.roads, this.water)
+      : null;
+    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns, this.cities, this.industry, this.water, this.roadside);
     this.mountains = new Mountains(scene, seed);
     this.impostors = new MountainImpostors(scene, this.generator);
     this._n = new THREE.Vector3();

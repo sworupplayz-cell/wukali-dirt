@@ -33,7 +33,7 @@ const SKIRT = 3;       // skirt depth (m)
 const MAX_PROPS_PER_CHUNK = 44;
 
 export class ChunkManager {
-  constructor(scene, generator, villages = null, towns = null, cities = null, industry = null, water = null) {
+  constructor(scene, generator, villages = null, towns = null, cities = null, industry = null, water = null, roadside = null) {
     this.scene = scene;
     this.gen = generator;
     this.villages = villages;
@@ -41,6 +41,7 @@ export class ChunkManager {
     this.cities = cities;
     this.industry = industry;
     this.water = water; // NepalWater (nepal mode) or null
+    this.roadside = roadside; // NepalRoadside (nepal mode) or null
     this.chunks = new Map();       // key -> chunk record
     this.queue = [];               // keys awaiting mesh build
     this.activeColliders = [];
@@ -328,6 +329,7 @@ export class ChunkManager {
     if (this.towns) inject(this.towns.forChunk(ox, oz, CHUNK_SIZE));
     if (this.cities) inject(this.cities.forChunk(ox, oz, CHUNK_SIZE));
     if (this.industry) inject(this.industry.forChunk(ox, oz, CHUNK_SIZE));
+    if (this.roadside) inject(this.roadside.forChunk(ox, oz, CHUNK_SIZE));
     const inClearing = (x, z) => {
       if (!clearings) return false;
       for (const v of clearings) {

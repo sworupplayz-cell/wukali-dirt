@@ -118,6 +118,12 @@ export class NepalMacro {
         h += (q.centerH - h) * q.shelf * 0.75;
         mul *= 1 - 0.6 * q.shelf;
       }
+      // W-3F: bridge decks — level terrain spans over river crossings,
+      // pinned to water level + clearance (rideable, perfectly aligned).
+      if (q.deck > 0 && q.deckH > h) {
+        h += (q.deckH - h) * q.deck;
+        mul *= 1 - 0.9 * q.deck;
+      }
     }
     return h + proceduralH * mul;
   }
@@ -139,6 +145,10 @@ export class NepalMacro {
       if (q.shelf > 0) {
         h += (q.centerH - h) * q.shelf * 0.75;
         mul *= 1 - 0.6 * q.shelf;
+      }
+      if (q.deck > 0 && q.deckH > h) {
+        h += (q.deckH - h) * q.deck;
+        mul *= 1 - 0.9 * q.deck;
       }
     }
     return (hTotal - h) / Math.max(0.2, mul);
