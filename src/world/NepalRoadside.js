@@ -135,13 +135,13 @@ export class NepalRoadside {
         // Bus stops on highways every ~22 nodes.
         if (hw && i % 22 === 11 && h < 0.8) {
           const bx = p.x + px * side * (off + 1.2), bz = p.z + pz * side * (off + 1.2);
-          if (infraOk(bx, bz)) put(bx, bz, it('busstop', bx, bz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 0, 0.2));
+          if (infraOk(bx, bz)) put(bx, bz, it('busstop', bx, bz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1.1, 0, 0.2));
         }
         // Fuel stations every ~37 highway nodes.
         if (hw && i % 37 === 18 && h < 0.7) {
           const fx = p.x + px * side * (off + 4), fz = p.z + pz * side * (off + 4);
           if (infraOk(fx, fz)) {
-            put(fx, fz, it('fuel', fx, fz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 1.6, 0.2));
+            put(fx, fz, it('fuel', fx, fz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1.2, 1.6, 0.2));
             put(fx, fz, it('parklot', fx + px * side * 6, fz + pz * side * 6, yawR, 1, 0, 0.12));
           }
         }
@@ -149,7 +149,7 @@ export class NepalRoadside {
         if (i % 29 === 7 && h < 0.6) {
           const rx = p.x + px * side * (off + 3), rz = p.z + pz * side * (off + 3);
           if (infraOk(rx, rz)) {
-            put(rx, rz, it('teashop', rx, rz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 2.2, 0.2));
+            put(rx, rz, it('teashop', rx, rz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1.4, 2.2, 0.2));
             put(rx, rz, it('parklot', rx + dx * 9, rz + dz * 9, yawR, 1, 0, 0.12));
           }
         }
@@ -189,8 +189,10 @@ export class NepalRoadside {
     };
     const hCls = (x, z) => {
       const h = hash01(Math.round(x * 3), Math.round(z * 3), SALT + 41);
-      return h < 0.35 ? 0.95 : h < 0.7 ? 1.05 : 1.15;
+      return h < 0.35 ? 1.45 : h < 0.7 ? 1.55 : 1.65; // real 2-storey townhouses
     };
+    const SVC_S = { school: 1.8, clinic: 1.5, shop: 1.5, teashop: 1.4, stall: 1.2,
+      fuel: 1.2, stupa: 1.2, busstop: 1.1, parklot: 1.3, wall: 1.1, flagpole: 1 };
     /** Lay a settlement strip along `route` starting at node i0. */
     const buildSettlement = (route, i0, kind, cfg) => {
       const pts = route.pts;
@@ -244,7 +246,8 @@ export class NepalRoadside {
                 : typ === 'fuel' ? 1.6 : typ === 'stall' ? 1.2 : typ === 'stupa' ? 1.1
                 : typ === 'busstop' || typ === 'flagpole' || typ === 'parklot' ? 0.3 : 2.2;
               rec.items.push(it(typ, sx, sz,
-                Math.atan2(dx, dz) + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, collR, 0.2));
+                Math.atan2(dx, dz) + (side > 0 ? -Math.PI / 2 : Math.PI / 2),
+                SVC_S[typ] || 1, collR, 0.2));
               placedS++;
             } else {
               placedS++;
@@ -259,6 +262,192 @@ export class NepalRoadside {
       return false;
     };
 
+    // ---- W-3I: real-scale city cores at the six urban anchors --------------
+    // Dense multi-storey core → commercial band → residential rows, with
+    // perpendicular side streets (pitched rideable strips) branching off
+    // the real highway, public services, a bus terminal, a park, parking,
+    // per-city landmarks and a light-industrial edge where appropriate.
+    // All dimensions in real metres (scale audit: base props were 1.5-2x
+    // undersized; corrected via per-type scales — KTM towers ≈ 9x8 m
+    // footprint and 18-22 m tall, shops ≈ 4.5-6 m fronts, streets 6.2 m).
+    const CITY_CFG = {
+      kathmandu: { towerS: 2.2, dense: 1.0, industrial: false, landmark: 'temple' },
+      pokhara: { towerS: 1.8, dense: 0.8, industrial: false, landmark: 'lakeside' },
+      bharatpur: { towerS: 1.7, dense: 0.75, industrial: true, landmark: 'market' },
+      butwal: { towerS: 1.8, dense: 0.8, industrial: true, landmark: 'stupa' },
+      biratnagar: { towerS: 1.7, dense: 0.8, industrial: 'heavy', landmark: 'stadium' },
+      nepalgunj: { towerS: 1.7, dense: 0.75, industrial: true, landmark: 'market' },
+    };
+    const buildCity = (route, iC, cityId, cfg) => {
+      const pts = route.pts;
+      const cC = pts[iC];
+      const H = (a, b) => hash01(a, Math.round(b), SALT + 101);
+      let nB = 0;
+      const putB = (typ, x, z, yaw, sc, collR) => {
+        if (!spotOk(x, z, 0.5)) return false;
+        recFor(x, z, 13).items.push(it(typ, x, z, yaw, sc, collR, 0.25));
+        nB++;
+        return true;
+      };
+      for (let i = Math.max(2, iC - 6); i <= Math.min(pts.length - 2, iC + 6); i++) {
+        const p = pts[i], q = pts[i + 1];
+        const len = Math.hypot(q.x - p.x, q.z - p.z) || 1;
+        const dx = (q.x - p.x) / len, dz = (q.z - p.z) / len;
+        const px = -dz, pz = dx;
+        const yawR = Math.atan2(dx, dz);
+        const alongM = (i - iC) * 110;
+        const zone = Math.abs(alongM) < 180 ? 'core'
+          : Math.abs(alongM) < 360 ? 'commercial' : 'residential';
+
+        // Main-street frontage.
+        for (const side of [-1, 1]) {
+          const face = yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
+          const nPos = zone === 'core' ? 5 : 4;
+          for (let k = 0; k < nPos; k++) {
+            const h = H(i * 41 + k * 7 + side + 1, p.x);
+            if (h > (zone === 'core' ? 0.9 : 0.72) * cfg.dense) continue;
+            const along = (k + 0.5) / nPos;
+            const bx = p.x + dx * along * len + px * side * (14 + h * 3);
+            const bz = p.z + dz * along * len + pz * side * (14 + h * 3);
+            if (zone === 'core') {
+              const typ = h < 0.45 ? 'cityA' : 'cityB';
+              putB(typ, bx, bz, face, cfg.towerS * (0.93 + h * 0.18), 2.35);
+            } else if (zone === 'commercial') {
+              const typ = h < 0.3 ? 'shop' : h < 0.45 ? 'teashop'
+                : h < 0.75 ? 'townhouseA' : 'townhouseB';
+              putB(typ, bx, bz, face, typ === 'shop' || typ === 'teashop' ? 1.5 : 1.55, 2.4);
+            } else {
+              const typ = h < 0.55 ? 'house' : 'townhouseA';
+              putB(typ, bx, bz, face, typ === 'house' ? 1 : 1.5, 2.4);
+            }
+          }
+          // Sidewalk poles along the core/commercial main street.
+          if (zone !== 'residential' && i % 1 === 0) {
+            const lx = p.x + px * side * 8.6, lz = p.z + pz * side * 8.6;
+            if (spotOk(lx, lz, 0.7)) recFor(lx, lz, -22).items.push(it('pole', lx, lz, yawR, 1, 0.25, 0.25));
+          }
+        }
+
+        // Side streets: perpendicular rideable strips + their buildings.
+        if (Math.abs(alongM) <= 470) {
+          for (const side of [-1, 1]) {
+            const nSeg = zone === 'core' ? 5 : 3;
+            for (let sg = 1; sg <= nSeg; sg++) {
+              const off = side * (8 + sg * 7.6);
+              const sx2 = p.x + px * off, sz2 = p.z + pz * off;
+              if (!spotOk(sx2, sz2, 0.5)) break;
+              const hA = gen.height(sx2 - px * 4, sz2 - pz * 4);
+              const hB = gen.height(sx2 + px * 4, sz2 + pz * 4);
+              recFor(sx2, sz2, -22).items.push({ type: 'roadseg', x: sx2, z: sz2,
+                yaw: yawR, s: 1.2, collR: 0, sink: 0.02, rx: Math.atan2(hA - hB, 8) });
+              // Buildings lining the side street.
+              if (sg >= 2) {
+                const hh = H(i * 67 + sg * 11 + side + 2, p.z);
+                if (hh < 0.62 * cfg.dense) {
+                  const bx = sx2 + dx * 8.6, bz = sz2 + dz * 8.6;
+                  const typ = zone === 'core' ? (hh < 0.4 ? 'cityB' : 'shop')
+                    : hh < 0.5 ? 'house' : 'townhouseB';
+                  putB(typ, bx, bz, yawR + Math.PI,
+                    typ === 'cityB' ? cfg.towerS * 0.85 : typ === 'shop' ? 1.5
+                    : typ === 'house' ? 1 : 1.5, 2.3);
+                }
+              }
+            }
+            // Street sign at the junction.
+            const jx = p.x + px * side * 9.2, jz = p.z + pz * side * 9.2;
+            if (Math.abs(alongM) < 250 && spotOk(jx, jz, 0.7)) {
+              recFor(jx, jz, -22).items.push(it('roadsign', jx, jz, yawR, 1, 0.2, 0.1));
+            }
+          }
+        }
+      }
+
+      // ---- Public services + open spaces (fixed slots, validated) ----------
+      const slot = (typ, along, off, sc, collR) => {
+        const i = iC + Math.round(along / 110);
+        if (i < 2 || i >= pts.length - 1) return false;
+        const p = pts[i], q = pts[i + 1];
+        const len = Math.hypot(q.x - p.x, q.z - p.z) || 1;
+        const dx = (q.x - p.x) / len, dz = (q.z - p.z) / len;
+        const x = p.x + -dz * off, z = p.z + dx * off;
+        return putB(typ, x, z, Math.atan2(dx, dz) + (off > 0 ? -Math.PI / 2 : Math.PI / 2), sc, collR);
+      };
+      slot('school', 260, 28, 1.8, 3.8) || slot('school', -260, -28, 1.8, 3.8);
+      slot('clinic', -230, 26, 1.5, 2.4);
+      slot('clinic', 370, -24, 1.5, 2.4);
+      slot('fuel', -310, 13, 1.2, 1.6);
+      slot('busstop', 65, 9.3, 1.1, 0);
+      slot('busstop', -65, -9.3, 1.1, 0);
+      // Bus terminal: parking row + double stop.
+      for (let k = 0; k < 3; k++) slot('parklot', -150 - k * 14, 27, 1.4, 0);
+      slot('busstop', -150, 17, 1.1, 0);
+      // Park: green square with trees, walls and a flag.
+      for (let k = 0; k < 6; k++) {
+        slot('tree', 150 + (k % 3) * 12, -30 - Math.floor(k / 3) * 11, 1.3, 0.5);
+      }
+      slot('wall', 138, -24, 1.4, 0.9);
+      slot('flagpole', 162, -36, 1.2, 0.3);
+      slot('parklot', 95, 14, 1.3, 0);
+      slot('parklot', -95, -14, 1.3, 0);
+
+      // ---- Landmarks ---------------------------------------------------------
+      if (cfg.landmark === 'temple') {
+        slot('pagoda', 0, 34, 1.8, 3.6) || slot('pagoda', 30, -34, 1.8, 3.6);
+        slot('stupa', 22, 30, 1.5, 1.4);
+        slot('flagpole', -14, 30, 1.2, 0.3);
+        slot('parklot', 12, 44, 1.3, 0);
+      } else if (cfg.landmark === 'lakeside') {
+        for (let k = 0; k < 4; k++) {
+          slot('teashop', -70 - k * 22, 10.5, 1.4, 2.2);
+          slot('stall', -80 - k * 22, 10.2, 1.2, 1.1);
+        }
+        slot('pagoda', 20, 32, 1.6, 3.2);
+        slot('flagpole', -60, 14, 1.2, 0.3);
+      } else if (cfg.landmark === 'market') {
+        for (let k = 0; k < 9; k++) {
+          slot('stall', 115 + (k % 3) * 9, 22 + Math.floor(k / 3) * 8, 1.25, 1.1) ||
+            slot('stall', -115 - (k % 3) * 9, -(22 + Math.floor(k / 3) * 8), 1.25, 1.1);
+        }
+        slot('shop', 100, 20, 1.5, 2.4) || slot('shop', -100, -20, 1.5, 2.4);
+      } else if (cfg.landmark === 'stupa') {
+        slot('stupa', 0, 36, 2.2, 2.0) || slot('stupa', 40, -36, 2.2, 2.0);
+        slot('flagpole', 10, 32, 1.3, 0.3);
+        slot('flagpole', -10, 32, 1.3, 0.3);
+      } else if (cfg.landmark === 'stadium') {
+        const i = Math.min(pts.length - 2, iC + 5);
+        const p = pts[i], q = pts[i + 1];
+        const len = Math.hypot(q.x - p.x, q.z - p.z) || 1;
+        const sx = p.x + -((q.z - p.z) / len) * 62, sz = p.z + ((q.x - p.x) / len) * 62;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const x = sx + Math.cos(a) * 30, z = sz + Math.sin(a) * 25;
+          if (spotOk(x, z, 0.5)) {
+            recFor(x, z, 14).items.push(it('stand', x, z,
+              Math.atan2(sx - x, sz - z) + Math.PI, 1.3, 2.6, 0.3));
+            nB++;
+          }
+        }
+        slot('parklot', 440, 30, 1.4, 0);
+      }
+
+      // ---- Light-industrial edge --------------------------------------------
+      if (cfg.industrial) {
+        const sides = cfg.industrial === 'heavy' ? [-1, 1] : [1];
+        for (const sd of sides) {
+          slot('factory', 640, sd * 22, 1.3, 4.6);
+          slot('warehouse', 690, sd * 24, 1.3, 4.6);
+          slot('warehouse', 600, sd * 26, 1.25, 4.4);
+          slot('silo', 670, sd * 33, 1.1, 1.7);
+          slot('truck', 655, sd * 15, 1.1, 2.0);
+          slot('truck', 620, sd * 17, 1.1, 2.0);
+          for (let k = 0; k < 4; k++) slot('fence', 615 + k * 6.5, sd * 40, 0.9, 0);
+          slot('parklot', 610, sd * 13, 1.4, 0);
+        }
+      }
+      this.settlements.push({ kind: 'city', id: cityId, x: cC.x, z: cC.z, r: 620, houses: nB });
+      return nB;
+    };
+
     // Pass 1: urban anchors at the six blueprint cities.
     for (const city of CITIES) {
       const ax = (city.u - 0.5) * 50000, az = (0.5 - city.v) * 50000;
@@ -270,12 +459,17 @@ export class NepalRoadside {
         }
       }
       if (best && bd < 600 * 600) {
-        const i0 = Math.max(2, Math.min(bi - 3, best.pts.length - 9));
-        buildSettlement(best, i0, 'anchor', {
-          spanNodes: 6, sp: 13, rows: 2, density: 0.85, maxH: 55, minH: 12,
-          plainHouse: 0.35,
-          services: ['shop', 'shop', 'teashop', 'school', 'clinic', 'fuel',
-            'busstop', 'busstop', 'stall', 'stall', 'parklot', 'stupa'],
+        // W-3I: full real-scale city core replaces the W-3H anchor strip.
+        buildCity(best, Math.max(6, Math.min(bi, best.pts.length - 8)), city.id,
+          CITY_CFG[city.id] || CITY_CFG.bharatpur);
+        // Residential outskirt strips beyond the core (rural transition).
+        buildSettlement(best, Math.max(2, bi - 10), 'anchor-outskirt', {
+          spanNodes: 3, sp: 15, rows: 1, density: 0.5, maxH: 10, minH: 3,
+          plainHouse: 0.7, services: [],
+        });
+        buildSettlement(best, Math.min(best.pts.length - 5, bi + 7), 'anchor-outskirt', {
+          spanNodes: 3, sp: 15, rows: 1, density: 0.5, maxH: 10, minH: 3,
+          plainHouse: 0.7, services: [],
         });
       }
     }

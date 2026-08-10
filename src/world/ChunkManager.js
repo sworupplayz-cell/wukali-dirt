@@ -324,7 +324,7 @@ export class ChunkManager {
             if (this.gen.macro.roads &&
                 this.gen.macro.roads.query(it.x, it.z).mask > 0.35) continue;
             const hs = hash01(Math.round(it.x * 3), Math.round(it.z * 3), this.gen.seed * 37 + 91);
-            sMul = hs < 0.3 ? 1.15 : hs < 0.65 ? 1.3 : hs < 0.9 ? 1.45 : 1.6;
+            sMul = hs < 0.3 ? 1.45 : hs < 0.65 ? 1.6 : hs < 0.9 ? 1.75 : 1.9; // W-3I real-scale audit
           }
           const prop = { t: PROP[it.type], x: it.x, y: iy - it.sink,
             z: it.z, yaw: it.yaw, s: it.s * sMul };
