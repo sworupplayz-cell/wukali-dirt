@@ -33,10 +33,11 @@ const SKIRT = 3;       // skirt depth (m)
 const MAX_PROPS_PER_CHUNK = 44;
 
 export class ChunkManager {
-  constructor(scene, generator, villages = null) {
+  constructor(scene, generator, villages = null, towns = null) {
     this.scene = scene;
     this.gen = generator;
     this.villages = villages;
+    this.towns = towns;
     this.chunks = new Map();       // key -> chunk record
     this.queue = [];               // keys awaiting mesh build
     this.activeColliders = [];
@@ -303,9 +304,8 @@ export class ChunkManager {
     // normal prop/collider pipeline, so instancing + streaming are free).
     // Villages also clear trees inside their footprint (see below).
     let clearings = null;
-    if (this.villages) {
-      const vs = this.villages.forChunk(ox, oz, CHUNK_SIZE);
-      for (const v of vs) {
+    const inject = (settlements) => {
+      for (const v of settlements) {
         (clearings = clearings || []).push(v);
         for (const it of v.items) {
           if (it.x < ox || it.x >= ox + CHUNK_SIZE || it.z < oz || it.z >= oz + CHUNK_SIZE) continue;
@@ -314,7 +314,9 @@ export class ChunkManager {
           if (it.collR > 0) c.colliders.push({ x: it.x, z: it.z, r: it.collR * it.s });
         }
       }
-    }
+    };
+    if (this.villages) inject(this.villages.forChunk(ox, oz, CHUNK_SIZE));
+    if (this.towns) inject(this.towns.forChunk(ox, oz, CHUNK_SIZE));
     const inClearing = (x, z) => {
       if (!clearings) return false;
       for (const v of clearings) {

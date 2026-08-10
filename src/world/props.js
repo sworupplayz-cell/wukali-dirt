@@ -333,6 +333,156 @@ function channel() {
   return merge([water, bankA, bankB]);
 }
 
+// ---- Phase 3L-2: Nepali town & bazaar buildings ---------------------------
+
+function corrRoof(w, d, r, g, b) {
+  // Corrugated sheet roof: thin slab + ridge strips.
+  const parts = [colorize(new THREE.BoxGeometry(w, 0.1, d), r, g, b)];
+  for (let i = 0; i < 3; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(w + 0.15, 0.05, 0.1), r * 0.85, g * 0.85, b * 0.85)
+      .translate(0, 0.06, -d / 2 + 0.2 + i * (d - 0.4) / 2));
+  }
+  return parts;
+}
+
+function townhouseA() {
+  // Two-storey plaster house: sky-blue upper, white lower, balcony slab.
+  const parts = [
+    colorize(new THREE.BoxGeometry(3.4, 2.2, 3.0), 0.88, 0.87, 0.82).translate(0, 1.1, 0),
+    colorize(new THREE.BoxGeometry(3.4, 2.0, 3.0), 0.45, 0.62, 0.78).translate(0, 3.2, 0),
+    colorize(new THREE.BoxGeometry(3.7, 0.16, 1.0), 0.75, 0.74, 0.7).translate(0, 2.25, 1.7),
+    colorize(new THREE.BoxGeometry(3.5, 0.5, 0.06), 0.6, 0.58, 0.55).translate(0, 2.6, 2.16),
+    colorize(new THREE.BoxGeometry(0.8, 1.4, 0.08), 0.25, 0.18, 0.12).translate(-0.8, 0.7, 1.52),
+    colorize(new THREE.BoxGeometry(0.7, 0.6, 0.08), 0.2, 0.25, 0.3).translate(0.8, 1.4, 1.52),
+    colorize(new THREE.BoxGeometry(0.7, 0.6, 0.08), 0.2, 0.25, 0.3).translate(-0.8, 3.4, 1.52),
+    colorize(new THREE.BoxGeometry(0.7, 0.6, 0.08), 0.2, 0.25, 0.3).translate(0.8, 3.4, 1.52),
+  ];
+  for (const rp of corrRoof(3.8, 3.4, 0.55, 0.58, 0.62)) parts.push(rp.translate(0, 4.3, 0));
+  return merge(parts);
+}
+
+function townhouseB() {
+  // Pink/cream plaster house variant with side stair block.
+  const parts = [
+    colorize(new THREE.BoxGeometry(3.2, 2.1, 2.8), 0.9, 0.72, 0.66).translate(0, 1.05, 0),
+    colorize(new THREE.BoxGeometry(3.2, 1.9, 2.8), 0.93, 0.88, 0.78).translate(0, 3.0, 0),
+    colorize(new THREE.BoxGeometry(1.0, 2.1, 1.0), 0.8, 0.62, 0.56).translate(2.0, 1.05, -0.5),
+    colorize(new THREE.BoxGeometry(0.8, 1.35, 0.08), 0.25, 0.18, 0.12).translate(0.6, 0.68, 1.42),
+    colorize(new THREE.BoxGeometry(0.7, 0.6, 0.08), 0.2, 0.25, 0.3).translate(-0.7, 3.1, 1.42),
+    colorize(new THREE.BoxGeometry(0.7, 0.6, 0.08), 0.2, 0.25, 0.3).translate(0.7, 3.1, 1.42),
+  ];
+  for (const rp of corrRoof(3.6, 3.2, 0.62, 0.5, 0.44)) parts.push(rp.translate(0, 4.0, 0));
+  return merge(parts);
+}
+
+function shop() {
+  // Colourful lock-up shop: bright front, awning, sign board.
+  const parts = [
+    colorize(new THREE.BoxGeometry(3.0, 2.5, 2.6), 0.2, 0.55, 0.55).translate(0, 1.25, 0),
+    colorize(new THREE.BoxGeometry(2.2, 1.7, 0.15), 0.1, 0.1, 0.12).translate(0, 0.95, 1.28),
+    colorize(new THREE.BoxGeometry(3.1, 0.08, 1.1), 0.95, 0.6, 0.2).translate(0, 2.15, 1.7).rotateX(0.14),
+    colorize(new THREE.BoxGeometry(2.6, 0.5, 0.08), 0.95, 0.9, 0.75).translate(0, 2.75, 1.34),
+  ];
+  for (const rp of corrRoof(3.3, 2.9, 0.55, 0.57, 0.6)) parts.push(rp.translate(0, 2.6, 0));
+  return merge(parts);
+}
+
+function teashop() {
+  // Tiny tea/food shack: plank walls, tarp awning, bench.
+  const parts = [
+    colorize(new THREE.BoxGeometry(2.4, 2.0, 2.0), 0.5, 0.38, 0.26).translate(0, 1.0, 0),
+    colorize(new THREE.BoxGeometry(1.6, 1.1, 0.12), 0.12, 0.1, 0.1).translate(0, 0.8, 1.0),
+    colorize(new THREE.BoxGeometry(2.6, 0.06, 1.2), 0.85, 0.3, 0.25).translate(0, 2.0, 1.2).rotateX(0.12),
+    colorize(new THREE.BoxGeometry(1.6, 0.08, 0.35), 0.6, 0.48, 0.32).translate(0, 0.45, 1.6),
+  ];
+  for (const rp of corrRoof(2.6, 2.3, 0.5, 0.52, 0.55)) parts.push(rp.translate(0, 2.1, 0));
+  return merge(parts);
+}
+
+function workshop() {
+  // Garage/workshop: grey shed, wide dark opening, lean-to roof, drum.
+  const parts = [
+    colorize(new THREE.BoxGeometry(3.6, 2.4, 3.0), 0.55, 0.55, 0.55).translate(0, 1.2, 0),
+    colorize(new THREE.BoxGeometry(2.6, 1.9, 0.15), 0.08, 0.08, 0.09).translate(0, 1.0, 1.5),
+    colorize(new THREE.CylinderGeometry(0.3, 0.3, 0.8, 7), 0.6, 0.3, 0.15).translate(1.9, 0.4, 1.2),
+  ];
+  for (const rp of corrRoof(4.0, 3.4, 0.45, 0.47, 0.5)) parts.push(rp.rotateZ(0.08).translate(0, 2.6, 0));
+  return merge(parts);
+}
+
+function school() {
+  // Long single-storey school: white walls, blue band, red roof, doorway.
+  const parts = [
+    colorize(new THREE.BoxGeometry(7.5, 2.4, 3.0), 0.92, 0.91, 0.86).translate(0, 1.2, 0),
+    colorize(new THREE.BoxGeometry(7.6, 0.5, 3.1), 0.3, 0.45, 0.7).translate(0, 0.35, 0),
+    colorize(new THREE.BoxGeometry(0.9, 1.5, 0.1), 0.25, 0.18, 0.12).translate(0, 0.75, 1.52),
+  ];
+  for (let i = 0; i < 3; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(0.9, 0.7, 0.1), 0.2, 0.26, 0.32)
+      .translate(-2.6 + i * 1.7 + (i > 0 ? 0.9 : 0), 1.5, 1.52));
+  }
+  for (const rp of corrRoof(7.9, 3.4, 0.68, 0.3, 0.26)) parts.push(rp.translate(0, 2.55, 0));
+  return merge(parts);
+}
+
+function clinic() {
+  // Health post: white block with a red cross.
+  const parts = [
+    colorize(new THREE.BoxGeometry(3.4, 2.5, 2.8), 0.94, 0.94, 0.92).translate(0, 1.25, 0),
+    colorize(new THREE.BoxGeometry(0.75, 0.22, 0.08), 0.85, 0.15, 0.15).translate(0, 2.0, 1.44),
+    colorize(new THREE.BoxGeometry(0.22, 0.75, 0.08), 0.85, 0.15, 0.15).translate(0, 2.0, 1.44),
+    colorize(new THREE.BoxGeometry(0.85, 1.45, 0.1), 0.3, 0.35, 0.4).translate(0, 0.73, 1.42),
+  ];
+  for (const rp of corrRoof(3.7, 3.1, 0.62, 0.64, 0.68)) parts.push(rp.translate(0, 2.6, 0));
+  return merge(parts);
+}
+
+function busstop() {
+  // Roadside shelter: two posts, roof, bench.
+  return merge([
+    colorize(new THREE.BoxGeometry(0.12, 2.1, 0.12), 0.45, 0.45, 0.48).translate(-1.1, 1.05, -0.4),
+    colorize(new THREE.BoxGeometry(0.12, 2.1, 0.12), 0.45, 0.45, 0.48).translate(1.1, 1.05, -0.4),
+    colorize(new THREE.BoxGeometry(2.8, 0.08, 1.4), 0.35, 0.5, 0.62).translate(0, 2.15, 0).rotateX(0.1),
+    colorize(new THREE.BoxGeometry(2.4, 0.08, 0.4), 0.6, 0.48, 0.32).translate(0, 0.5, -0.35),
+    colorize(new THREE.BoxGeometry(2.8, 0.9, 0.08), 0.55, 0.6, 0.62).translate(0, 1.5, -0.5),
+  ]);
+}
+
+function fuelStation() {
+  // Tiny fuel stop: canopy on posts + one pump.
+  return merge([
+    colorize(new THREE.BoxGeometry(0.16, 3.0, 0.16), 0.7, 0.7, 0.72).translate(-1.6, 1.5, 0),
+    colorize(new THREE.BoxGeometry(0.16, 3.0, 0.16), 0.7, 0.7, 0.72).translate(1.6, 1.5, 0),
+    colorize(new THREE.BoxGeometry(4.4, 0.18, 3.0), 0.85, 0.25, 0.2).translate(0, 3.05, 0),
+    colorize(new THREE.BoxGeometry(0.6, 1.3, 0.45), 0.8, 0.3, 0.2).translate(0.5, 0.65, 0),
+    colorize(new THREE.BoxGeometry(0.35, 0.3, 0.2), 0.9, 0.9, 0.9).translate(0.5, 1.0, 0.15),
+  ]);
+}
+
+function utilityPole() {
+  // Power pole with crossarm.
+  return merge([
+    colorize(new THREE.CylinderGeometry(0.07, 0.1, 5.4, 5), 0.4, 0.36, 0.32).translate(0, 2.7, 0),
+    colorize(new THREE.BoxGeometry(1.3, 0.1, 0.1), 0.35, 0.32, 0.28).translate(0, 4.9, 0),
+    colorize(new THREE.BoxGeometry(0.08, 0.18, 0.08), 0.7, 0.72, 0.75).translate(-0.5, 5.05, 0),
+    colorize(new THREE.BoxGeometry(0.08, 0.18, 0.08), 0.7, 0.72, 0.75).translate(0.5, 5.05, 0),
+  ]);
+}
+
+function marketStall() {
+  // Bazaar stall: table + colourful tarp on sticks + produce boxes.
+  return merge([
+    colorize(new THREE.BoxGeometry(2.0, 0.1, 1.1), 0.55, 0.42, 0.28).translate(0, 0.85, 0),
+    colorize(new THREE.BoxGeometry(0.08, 0.85, 0.08), 0.45, 0.35, 0.22).translate(-0.9, 0.43, 0.45),
+    colorize(new THREE.BoxGeometry(0.08, 0.85, 0.08), 0.45, 0.35, 0.22).translate(0.9, 0.43, 0.45),
+    colorize(new THREE.BoxGeometry(0.08, 2.0, 0.08), 0.45, 0.35, 0.22).translate(-0.9, 1.0, -0.45),
+    colorize(new THREE.BoxGeometry(0.08, 2.0, 0.08), 0.45, 0.35, 0.22).translate(0.9, 1.0, -0.45),
+    colorize(new THREE.BoxGeometry(2.3, 0.06, 1.5), 0.9, 0.55, 0.15).translate(0, 2.0, 0).rotateX(-0.18),
+    colorize(new THREE.BoxGeometry(0.5, 0.25, 0.4), 0.8, 0.2, 0.15).translate(-0.5, 1.02, 0),
+    colorize(new THREE.BoxGeometry(0.5, 0.25, 0.4), 0.3, 0.55, 0.2).translate(0.25, 1.02, 0.1),
+  ]);
+}
+
 export const PROP_TYPES = [
   { name: 'pine', build: pine, max: 800 },
   { name: 'tree', build: broadleaf, max: 420 },
@@ -362,6 +512,18 @@ export const PROP_TYPES = [
   { name: 'tea', build: tea, max: 380 },
   { name: 'banana', build: banana, max: 110, doubleSided: true },
   { name: 'channel', build: channel, max: 120 },
+  // Phase 3L-2 town & bazaar buildings.
+  { name: 'townhouseA', build: townhouseA, max: 60 },
+  { name: 'townhouseB', build: townhouseB, max: 60 },
+  { name: 'shop', build: shop, max: 60 },
+  { name: 'teashop', build: teashop, max: 36 },
+  { name: 'workshop', build: workshop, max: 20 },
+  { name: 'school', build: school, max: 10 },
+  { name: 'clinic', build: clinic, max: 10 },
+  { name: 'busstop', build: busstop, max: 20 },
+  { name: 'fuel', build: fuelStation, max: 10 },
+  { name: 'pole', build: utilityPole, max: 90 },
+  { name: 'stall', build: marketStall, max: 60 },
 ];
 
 export const PROP = {};

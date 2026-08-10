@@ -210,7 +210,7 @@ export class UI {
     // Nature discovery toast (Phase 3K-2).
     game.onDiscover = (d) => {
       const icon = d.type === 'lake' ? '\u{1F30A}' : d.type === 'wf' ? '\u{1F4A7}'
-        : d.type === 'village' ? '\u{1F3D8}\uFE0F' : '\u{1F3D4}\uFE0F';
+        : d.type === 'village' ? '\u{1F3D8}\uFE0F' : d.type === 'town' ? '\u{1F3EA}' : '\u{1F3D4}\uFE0F';
       this.discoveryToast.textContent =
         `${icon} DISCOVERED \u00B7 ${d.name}${d.meta ? ` \u00B7 \u{1F3C6} ${d.meta}` : ''}`;
       this.discoveryToast.classList.add('show');

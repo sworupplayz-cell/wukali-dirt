@@ -5,6 +5,7 @@ import { ChunkManager, CHUNK_SIZE } from './ChunkManager.js';
 import { Mountains } from './Mountains.js';
 import { MountainImpostors } from './MountainImpostors.js';
 import { Villages } from './Villages.js';
+import { Towns } from './Towns.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -21,7 +22,8 @@ export class WorldManager {
     this.generator.getRegistry(); // eager: curated names apply from frame one
     this._buildLighting(scene);
     this.villages = new Villages(this.generator);
-    this.chunks = new ChunkManager(scene, this.generator, this.villages);
+    this.towns = new Towns(this.generator, this.villages);
+    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns);
     this.mountains = new Mountains(scene, seed);
     this.impostors = new MountainImpostors(scene, this.generator);
     this._n = new THREE.Vector3();
