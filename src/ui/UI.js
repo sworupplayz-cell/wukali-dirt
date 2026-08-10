@@ -217,6 +217,34 @@ export class UI {
       this._discT = setTimeout(() => this.discoveryToast.classList.remove('show'), 3500);
     };
 
+    // Challenge events (Phase 3K-3) share the trial pill; a running
+    // mountain trial keeps display priority.
+    game.challenges.onEvent = (type, p) => {
+      if (game.trials.state === 'running') return;
+      clearTimeout(this._trialHideT);
+      if (type === 'prompt') {
+        const label = p.kind === 'sz' ? `\u{1F3AA} STUNT ZONE \u00B7 ${p.name} \u2014 ride in and go big!`
+          : p.kind === 'or' ? `\u{1F98F} OFF-ROAD \u00B7 ${p.name} (${p.len} m) \u2014 ride through the flag`
+          : `\u{1F332} TRAIL \u00B7 ${p.name} \u2014 ride through the flag`;
+        this.trialHud.textContent = label;
+        this.trialHud.classList.add('show');
+        this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 1800);
+      } else if (type === 'start' || type === 'cp') {
+        this.trialHud.classList.add('show');
+      } else if (type === 'finish') {
+        const extra = p.meta ? ` \u00B7 \u{1F3C6} ${p.meta}` : p.improved && !p.first ? ' \u00B7 NEW BEST' : '';
+        this.trialHud.textContent = p.score !== undefined
+          ? `\u{1F3AA} ${p.rec.name} \u2014 +${p.score} PTS${extra}`
+          : `\u{1F3C1} ${p.rec.name} \u2014 ${fmtT(p.time)}${extra}`;
+        this.trialHud.classList.add('show');
+        this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 5000);
+      } else if (type === 'fail') {
+        this.trialHud.textContent = `CHALLENGE OVER \u2014 ${p.reason}`;
+        this.trialHud.classList.add('show');
+        this._trialHideT = setTimeout(() => this.trialHud.classList.remove('show'), 2200);
+      }
+    };
+
     // HUD readouts: update at 5 Hz, not per frame (avoids DOM churn).
     setInterval(() => {
       if (game.state !== State.PLAYING && game.state !== State.CRASHED) return;
@@ -235,6 +263,14 @@ export class UI {
         this.trialHud.textContent = tr.cpIndex < tr.cpTotal()
           ? `\u23F1 ${fmtT(tr.time)} \u00B7 CP ${cp}/${tr.cpTotal()}`
           : `\u23F1 ${fmtT(tr.time)} \u00B7 TO THE SUMMIT!`;
+      } else if (game.challenges.active) {
+        const a = game.challenges.active;
+        this.trialHud.textContent = a.kind === 'sz'
+          ? `\u{1F3AA} STUNT ZONE ${Math.ceil(a.t)}s \u00B7 +${game.stunts.score - a.score0} PTS`
+          : a.kind === 'or'
+            ? `\u23F1 ${fmtT(a.t)} \u00B7 TO THE FINISH`
+            : `\u23F1 ${fmtT(a.t)} \u00B7 CP ${a.cp}/${a.rec.cps.length}`;
+        this.trialHud.classList.add('show');
       }
     }, 200);
   }

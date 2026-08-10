@@ -11,6 +11,7 @@ import { Achievements } from './Achievements.js';
 import { Settings } from './Settings.js';
 import { TimeTrial } from './TimeTrial.js';
 import { NatureSpots } from '../world/NatureSpots.js';
+import { Challenges } from './Challenges.js';
 
 export const State = {
   MENU: 'menu',
@@ -54,6 +55,7 @@ export class Game {
     this.achievements = new Achievements();
     this.trials = new TimeTrial(this.scene, this.world, this.achievements);
     this.nature = new NatureSpots(this.scene, this.world.generator, seed);
+    this.challenges = new Challenges(this.scene, this.world, this.stunts, this.achievements);
     this.onDiscover = null; // UI shows the discovery toast
     this.onSummit = null; // UI shows the summit banner
     this.newBest = false; // set when the run that just ended beat the best
@@ -118,6 +120,7 @@ export class Game {
     this.bike.fullReset();
     this.followCam.snapTo(this.bike);
     this.trials.cancel();
+    this.challenges.cancel();
     this._startRun();
     this._setState(State.PLAYING);
   }
@@ -126,6 +129,7 @@ export class Game {
     this.run.endRun();
     this.audio.setEngine(0, 0, false);
     this.trials.cancel();
+    this.challenges.cancel();
     this._setState(State.MENU);
   }
 
@@ -142,6 +146,7 @@ export class Game {
     this.followCam.snapTo(this.bike);
     this.stunts.cancel(); // teleport invalidates any in-flight stunt/combo
     this.trials.cancel();
+    this.challenges.cancel();
   }
 
   _startRun() {
@@ -205,6 +210,7 @@ export class Game {
         this._crashPending = false;
         this.newBest = this.run.endRun();
         this.trials.cancel(); // a crashed run forfeits the trial
+        this.challenges.cancel();
         this._setState(State.CRASHED);
       }
       // Summit detection: cheap check at 4 Hz, never per frame.
@@ -230,6 +236,8 @@ export class Game {
           if (res && this.onDiscover) this.onDiscover({ ...res, type: rec.type });
         }
       }
+      // Stunt/off-road/trail challenges (Phase 3K-3).
+      if (this.state === State.PLAYING) this.challenges.update(this.bike, frameDt);
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(
         Math.abs(this.bike.speed) / 26,

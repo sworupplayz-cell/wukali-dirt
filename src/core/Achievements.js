@@ -24,6 +24,26 @@ export class Achievements {
     this._data.meta = this._data.meta || {};
     this._data.trials = this._data.trials || {};
     this._data.discoveries = this._data.discoveries || {};
+    this._data.challenges = this._data.challenges || {};
+  }
+
+  /**
+   * Challenge completion (Phase 3K-3). Stunt zones keep the best SCORE,
+   * timed runs keep the best TIME. Returns { first, improved, best, meta }.
+   */
+  completeChallenge(id, name, kind, value) {
+    const prev = this._data.challenges[id];
+    const first = prev === undefined;
+    const improved = first || (kind === 'sz' ? value > prev.v : value < prev.v);
+    if (improved) this._data.challenges[id] = { v: value, name, kind };
+    const metaKey = kind === 'sz' ? 'stunt_star' : kind === 'or' ? 'pathfinder' : 'wayfinder';
+    let meta = null;
+    if (!this._data.meta[metaKey]) {
+      this._data.meta[metaKey] = true;
+      meta = kind === 'sz' ? 'Stunt Star' : kind === 'or' ? 'Pathfinder' : 'Wayfinder';
+    }
+    this._save();
+    return { first, improved, best: this._data.challenges[id].v, meta };
   }
 
   /**
@@ -94,6 +114,7 @@ export class Achievements {
       meta: META.filter((a) => this._data.meta[a.id]).map((a) => a.title),
       trials: { ...this._data.trials },
       discoveries: { ...this._data.discoveries },
+      challenges: { ...this._data.challenges },
     };
   }
 
