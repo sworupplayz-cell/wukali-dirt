@@ -66,6 +66,28 @@ export class NepalRoadside {
         }
       }
     }
+    // W-3J-S safety net: any node where river water still stands over the
+    // roadbed (crossings the transverse detector missed, or stretches that
+    // run along a channel) gets a causeway deck — same terrain-pin
+    // mechanism, so the road surface rises above the water everywhere.
+    {
+      const scr = { y: 0, foam: 0, inWater: false };
+      for (const route of roads.routes) {
+        let lastX = 1e9, lastZ = 1e9;
+        for (let i = 1; i < route.pts.length - 1; i++) {
+          const p = route.pts[i];
+          const h = gen.height(p.x, p.z);
+          water._riverLevel(p.x, p.z, scr);
+          if (!(scr.inWater && scr.y > h + 0.3)) continue;
+          if (Math.hypot(p.x - lastX, p.z - lastZ) < 70) continue;
+          lastX = p.x; lastZ = p.z;
+          const q = route.pts[i + 1];
+          const len = Math.hypot(q.x - p.x, q.z - p.z) || 1;
+          bridges.push({ x: p.x, z: p.z, dx: (q.x - p.x) / len, dz: (q.z - p.z) / len,
+            len: 42, deckH: scr.y + 1.2, routeKind: route.kind });
+        }
+      }
+    }
     roads.addBridges(bridges);
     this.bridges = bridges;
 
@@ -118,19 +140,21 @@ export class NepalRoadside {
           if (drop > 3.0) {
             for (const u of [-6.5, 0, 6.5]) {
               const fx = ex + dx * u, fz = ez + dz * u;
-              // fence panels extend along local X: align with the road
+              // fence panels extend along local X: align with the road.
+              // Skip watery ground — causeway decks carry their own rails.
+              if (water.submerged(fx, fz, gen.height(fx, fz))) continue;
               put(fx, fz, it('fence', fx, fz, yawR - Math.PI / 2, 0.8, 0, 0.3));
             }
           }
         }
         // Route markers/signs every ~9 nodes; poles on highways every 5.
         if (i % 9 === 4) {
-          put(p.x + px * side * off, p.z + pz * side * off,
-            it('roadsign', p.x + px * side * off, p.z + pz * side * off, yawR, 1, 0.2, 0.1));
+          const gx = p.x + px * side * off, gz = p.z + pz * side * off;
+          if (infraOk(gx, gz)) put(gx, gz, it('roadsign', gx, gz, yawR, 1, 0.2, 0.1));
         }
         if (hw && i % 5 === 2) {
-          put(p.x + px * -side * (off + 0.8), p.z + pz * -side * (off + 0.8),
-            it('pole', p.x + px * -side * (off + 0.8), p.z + pz * -side * (off + 0.8), yawR, 1, 0.25, 0.25));
+          const gx = p.x + px * -side * (off + 0.8), gz = p.z + pz * -side * (off + 0.8);
+          if (infraOk(gx, gz)) put(gx, gz, it('pole', gx, gz, yawR, 1, 0.25, 0.25));
         }
         // Bus stops on highways every ~22 nodes.
         if (hw && i % 22 === 11 && h < 0.8) {
