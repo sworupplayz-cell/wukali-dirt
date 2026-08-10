@@ -33,13 +33,14 @@ const SKIRT = 3;       // skirt depth (m)
 const MAX_PROPS_PER_CHUNK = 44;
 
 export class ChunkManager {
-  constructor(scene, generator, villages = null, towns = null, cities = null, industry = null) {
+  constructor(scene, generator, villages = null, towns = null, cities = null, industry = null, water = null) {
     this.scene = scene;
     this.gen = generator;
     this.villages = villages;
     this.towns = towns;
     this.cities = cities;
     this.industry = industry;
+    this.water = water; // NepalWater (nepal mode) or null
     this.chunks = new Map();       // key -> chunk record
     this.queue = [];               // keys awaiting mesh build
     this.activeColliders = [];
@@ -141,6 +142,7 @@ export class ChunkManager {
 
   _release(c) {
     this._releaseMesh(c);
+    if (this.water) this.water.release(c);
     c.props.length = 0;
     c.colliders.length = 0;
   }
@@ -239,6 +241,7 @@ export class ChunkManager {
     mesh.position.set(ox, 0, oz);
     mesh.updateMatrix();
     mesh.visible = true;
+    if (this.water) this.water.fill(c); // W-3D: flood the carved valleys
     c.built = true;
     this._instancesDirty = true;
   }
@@ -311,7 +314,9 @@ export class ChunkManager {
         (clearings = clearings || []).push(v);
         for (const it of v.items) {
           if (it.x < ox || it.x >= ox + CHUNK_SIZE || it.z < oz || it.z >= oz + CHUNK_SIZE) continue;
-          const prop = { t: PROP[it.type], x: it.x, y: this.gen.height(it.x, it.z) - it.sink,
+          const iy = this.gen.height(it.x, it.z);
+          if (this.water && this.water.submerged(it.x, it.z, iy)) continue; // W-3D
+          const prop = { t: PROP[it.type], x: it.x, y: iy - it.sink,
             z: it.z, yaw: it.yaw, s: it.s };
           if (it.rx) prop.rx = it.rx; // terrain-pitched strips (city streets)
           c.props.push(prop);
@@ -460,7 +465,9 @@ export class ChunkManager {
       }
       else if (pick < 0.62 * lush + 0.34 && info.wF > 0.4) { t = PROP.branch; sink = 0.05; }
       if (t < 0) continue;
-      c.props.push({ t, x, y: this.gen.height(x, z) - sink, z, yaw: rng() * Math.PI * 2, s });
+      const yMicro = this.gen.height(x, z);
+      if (this.water && this.water.submerged(x, z, yMicro)) continue; // W-3D
+      c.props.push({ t, x, y: yMicro - sink, z, yaw: rng() * Math.PI * 2, s });
     }
 
     for (let k2 = 0; k2 < 44 && c.props.length < MAX_PROPS_PER_CHUNK; k2++) {
@@ -547,7 +554,9 @@ export class ChunkManager {
       else if (t === PROP.pine || t === PROP.tree) sink += (1 - ny) * 0.8 * s;
       else if (t === PROP.bush || t === PROP.log) sink += (1 - ny) * 0.6 * s;
 
-      const y = this.gen.height(x, z) - sink;
+      const yG = this.gen.height(x, z);
+      if (this.water && this.water.submerged(x, z, yG)) continue; // W-3D: not in water
+      const y = yG - sink;
       const prop = { t, x, y, z, yaw: rng() * Math.PI * 2, s };
       if (t === PROP.rock) prop.rx = (rng() - 0.5) * 0.5;
       c.props.push(prop);
@@ -606,6 +615,7 @@ export class ChunkManager {
     this.gen.sampleInfo(x, z, info);
     if (info.trail > 0.3 || info.stream > streamLim || info.mtn > 0.02) return false;
     if (this.gen.nearFeature(x, z)) return false;
+    if (this.water && this.water.submerged(x, z, info.h)) return false; // W-3D
     return this._normalY(x, z) > 0.88;
   }
 
