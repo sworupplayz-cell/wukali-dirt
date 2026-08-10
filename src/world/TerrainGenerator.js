@@ -184,12 +184,34 @@ export class TerrainGenerator {
       b += (p[2] - b) * tm;
     }
     // Dirt trail overlay (bright sandy — reads clearly against every biome).
-    // Kind-4 signature roads read muddy under the forest canopy.
+    // Kind-4 signature mountains keep their forest roads muddy under canopy.
     const t = info.trail * 0.88;
     const mud = info.mtnKind === 4 && info.mtn > 0.02;
     r += ((mud ? 0.40 : 0.56) + 0.07 * j - r) * t;
     g += ((mud ? 0.32 : 0.44) + 0.05 * j - g) * t;
     b += ((mud ? 0.22 : 0.26) - b) * t;
+    // W-3K: PLANNED Nepal roads read as real roads, not sandy trails.
+    // Highways: dark graded asphalt + pale center line + gravel shoulders.
+    // Mountain roads: packed brown gravel, clearly narrower.
+    if (info.roadM > 0.3) {
+      const m = Math.min(1, (info.roadM - 0.3) / 0.55);
+      if (info.roadHw) {
+        r += (0.30 + 0.04 * j - r) * m;
+        g += (0.30 + 0.04 * j - g) * m;
+        b += (0.33 + 0.04 * j - b) * m;
+        if (info.roadD < 0.3) { // center line
+          r += (0.82 - r) * m * 0.85; g += (0.82 - g) * m * 0.85; b += (0.76 - b) * m * 0.85;
+        }
+      } else {
+        r += (0.44 + 0.05 * j - r) * m;
+        g += (0.38 + 0.04 * j - g) * m;
+        b += (0.30 - b) * m;
+      }
+      // Gravel shoulder band just past the surface edge.
+      const sh = sstep(info.roadW * 0.5 + 1.8, info.roadW * 0.5 + 0.3, info.roadD) *
+        (1 - sstep(info.roadW * 0.5 + 0.3, info.roadW * 0.42, info.roadD));
+      r += (0.52 - r) * sh * 0.7; g += (0.48 - g) * sh * 0.7; b += (0.40 - b) * sh * 0.7;
+    }
     // Edge wear: slightly darker, rougher dirt along trail borders.
     const wear = sstep(0.3, 0.5, info.trail) * (1 - sstep(0.78, 0.95, info.trail)) * 0.35;
     r -= r * 0.10 * wear; g -= g * 0.11 * wear; b -= b * 0.08 * wear;
@@ -705,11 +727,19 @@ export class TerrainGenerator {
       sstep(wV, wV * 0.4, Math.abs(t1)),
       sstep(wV * 0.85, wV * 0.35, Math.abs(t2))
     ) * (1 - mCore);
+    // W-3K: in the Nepal world the random trail network fades off the high
+    // walls/plateaus — only planned roads cross them (geographic coherence).
+    if (this.macro && this.macro.trailKeep) trailM *= this.macro.trailKeep(z);
     // W-3E: the planned Nepal highway/mountain network paints through the
     // same trail pipeline (dirt surface, detail smoothing, road grip).
     if (this.macro && this.macro.roads) {
       const rq = this.macro.roads.query(x, z);
       if (rq.mask > trailM) trailM = rq.mask;
+      if (info) { // W-3K: surface identity for colorFor (asphalt/gravel)
+        info.roadM = rq.mask; info.roadD = rq.d; info.roadW = rq.w; info.roadHw = rq.hw;
+      }
+    } else if (info) {
+      info.roadM = 0; info.roadD = 9e9; info.roadW = 5; info.roadHw = 0;
     }
     // The mountain road flattens base-terrain detail along its band both on
     // and off the dome (the dome's own slope is cancelled separately below);
@@ -913,6 +943,6 @@ export function makeInfo() {
   return {
     h: 0, wH: 0, wF: 0, wFa: 0, wRk: 0, wMnt: 0, lo: 0,
     trail: 0, stream: 0, terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0, mtnKind: 0, mtnRef: null,
-    snowOff: 0,
+    snowOff: 0, roadM: 0, roadD: 9e9, roadW: 5, roadHw: 0,
   };
 }

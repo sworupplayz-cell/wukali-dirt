@@ -128,6 +128,15 @@ export class NepalMacro {
     return h + proceduralH * mul;
   }
 
+  /** W-3K: procedural village-trail keep factor — the random trail network
+   *  fades out on the high-mountain walls and trans-Himalayan plateaus so
+   *  only the PLANNED roads cross them (coherent geography). */
+  trailKeep(z) {
+    let v = 0.5 - z / WORLD_SIZE;
+    if (v < 0) v = 0; else if (v > 1) v = 1;
+    return 1 - 0.85 * sstep(0.56, 0.72, v);
+  }
+
   /** Attach the planned road network (after construction; W-3E). */
   attachRoads(roads) {
     this.roads = roads;

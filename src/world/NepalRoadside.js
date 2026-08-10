@@ -352,27 +352,29 @@ export class NepalRoadside {
         nB++;
         return true;
       };
-      for (let i = Math.max(2, iC - 6); i <= Math.min(pts.length - 2, iC + 6); i++) {
+      for (let i = Math.max(2, iC - 8); i <= Math.min(pts.length - 2, iC + 8); i++) {
         const p = pts[i], q = pts[i + 1];
         const len = Math.hypot(q.x - p.x, q.z - p.z) || 1;
         const dx = (q.x - p.x) / len, dz = (q.z - p.z) / len;
         const px = -dz, pz = dx;
         const yawR = Math.atan2(dx, dz);
         const alongM = (i - iC) * 110;
-        const zone = Math.abs(alongM) < 180 ? 'core'
-          : Math.abs(alongM) < 360 ? 'commercial' : 'residential';
+        const zone = Math.abs(alongM) < 340 ? 'core'
+          : Math.abs(alongM) < 560 ? 'commercial' : 'residential';
 
         // Main-street frontage.
         for (const side of [-1, 1]) {
           const face = yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
           const nPos = zone === 'core' ? 4 : 5; // 16 m blocks need ~27 m pitch
+          for (let row = 0; row < 2; row++) { // W-3K: two building rows deep
           for (let k = 0; k < nPos; k++) {
-            const h = H(i * 41 + k * 7 + side + 1, p.x);
-            if (h > (zone === 'core' ? 0.9 : 0.72) * cfg.dense) continue;
+            const h = H(i * 41 + k * 7 + row * 13 + side + 1, p.x);
+            if (h > (zone === 'core' ? 0.92 : 0.78) * cfg.dense) continue;
             const along = (k + 0.5) / nPos;
             const core = zone === 'core';
-            const bx = p.x + dx * along * len + px * side * ((core ? 17 : 15) + h * 3);
-            const bz = p.z + dz * along * len + pz * side * ((core ? 17 : 15) + h * 3);
+            const rowOff = row * (core ? 21 : 18);
+            const bx = p.x + dx * along * len + px * side * ((core ? 17 : 15) + rowOff + h * 3);
+            const bz = p.z + dz * along * len + pz * side * ((core ? 17 : 15) + rowOff + h * 3);
             if (core) {
               const typ = h < 0.45 ? 'cityAN' : 'cityBN';
               putB(typ, bx, bz, face, cfg.towerS * (0.93 + h * 0.18),
@@ -387,6 +389,7 @@ export class NepalRoadside {
                 typ === 'houseN' ? 4.3 : 4.6);
             }
           }
+          }
           // Sidewalk poles along the core/commercial main street.
           if (zone !== 'residential' && i % 1 === 0) {
             const lx = p.x + px * side * 8.6, lz = p.z + pz * side * 8.6;
@@ -395,9 +398,9 @@ export class NepalRoadside {
         }
 
         // Side streets: perpendicular rideable strips + their buildings.
-        if (Math.abs(alongM) <= 470) {
+        if (Math.abs(alongM) <= 700) {
           for (const side of [-1, 1]) {
-            const nSeg = zone === 'core' ? 5 : 3;
+            const nSeg = zone === 'core' ? 7 : 4;
             for (let sg = 1; sg <= nSeg; sg++) {
               const off = side * (8 + sg * 7.6);
               const sx2 = p.x + px * off, sz2 = p.z + pz * off;
@@ -408,13 +411,15 @@ export class NepalRoadside {
                 yaw: yawR, s: 1.2, collR: 0, sink: 0.02, rx: Math.atan2(hA - hB, 8) });
               // Buildings lining the side street.
               if (sg >= 2) {
-                const hh = H(i * 67 + sg * 11 + side + 2, p.z);
-                if (hh < 0.62 * cfg.dense) {
-                  const bx = sx2 + dx * 11, bz = sz2 + dz * 11;
+                for (const bs of [-1, 1]) {
+                  const hh = H(i * 67 + sg * 11 + side * 3 + bs + 5, p.z);
+                  if (hh >= 0.68 * cfg.dense) continue;
+                  const bx = sx2 + dx * 11 * bs, bz = sz2 + dz * 11 * bs;
                   const typ = zone === 'core' ? (hh < 0.4 ? 'cityBN' : 'shopN')
                     : hh < 0.5 ? 'houseN' : 'townhouseN';
-                  putB(typ, bx, bz, yawR + Math.PI,
-                    typ === 'cityBN' ? cfg.towerS * 0.85 : 1,
+                  putB(typ, bx, bz, yawR + (bs > 0 ? Math.PI : 0),
+                    typ === 'cityBN' ? cfg.towerS * 0.85
+                    : typ === 'houseN' ? houseVar(bx, bz) : 1,
                     typ === 'cityBN' ? 6.8 : typ === 'shopN' ? 3.4
                     : typ === 'houseN' ? 4.3 : 4.6);
                 }

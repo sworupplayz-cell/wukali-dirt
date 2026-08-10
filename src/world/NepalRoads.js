@@ -72,13 +72,13 @@ export class NepalRoads {
       // Chaikin corner-cut pass — smoother switchbacks, finer node spacing.
       const sm = this._smooth(pts);
       this.routes.push({ id: d.id, kind: d.kind, w: d.w, pts: sm });
-      for (let i = 0; i < sm.length - 1; i++) this._addSeg(sm[i], sm[i + 1], d.w);
+      for (let i = 0; i < sm.length - 1; i++) this._addSeg(sm[i], sm[i + 1], d.w, d.kind === 'highway' ? 1 : 0);
     }
     // W-3F: bridge deck pins (registered later by NepalRoadside).
     this.bridges = [];
     this._bgrid = new Map();
     // Per-sample query cache (one query serves trail mask + macro bench).
-    this._q = { x: NaN, z: NaN, mask: 0, shelf: 0, centerH: 0, deck: 0, deckH: 0 };
+    this._q = { x: NaN, z: NaN, mask: 0, shelf: 0, centerH: 0, deck: 0, deckH: 0, d: 9e9, w: 5, hw: 0 };
   }
 
   /** One corner-cutting pass on sharp corners only (W-3F). */
@@ -174,8 +174,8 @@ export class NepalRoads {
     return pts;
   }
 
-  _addSeg(a, b, w) {
-    const seg = { ax: a.x, az: a.z, bx: b.x, bz: b.z, hA: a.h, hB: b.h, w,
+  _addSeg(a, b, w, hw) {
+    const seg = { ax: a.x, az: a.z, bx: b.x, bz: b.z, hA: a.h, hB: b.h, w, hw,
       len2: (b.x - a.x) ** 2 + (b.z - a.z) ** 2 || 1 };
     const idx = this._segs.push(seg) - 1;
     const m = w + 34; // bench + mask falloff margin
@@ -198,11 +198,11 @@ export class NepalRoads {
   query(x, z) {
     const q = this._q;
     if (q.x === x && q.z === z) return q;
-    q.x = x; q.z = z; q.mask = 0; q.shelf = 0; q.centerH = 0; q.deck = 0; q.deckH = 0;
+    q.x = x; q.z = z; q.mask = 0; q.shelf = 0; q.centerH = 0; q.deck = 0; q.deckH = 0; q.d = 9e9; q.w = 5; q.hw = 0;
     const key = Math.floor(x / CELL) * 100003 + Math.floor(z / CELL);
     const arr = this._grid.get(key);
     if (arr) {
-      let bd = Infinity, bH = 0, bw = 5;
+      let bd = Infinity, bH = 0, bw = 5, bhw = 0;
       for (let i = 0; i < arr.length; i++) {
         const s = this._segs[arr[i]];
         const apx = x - s.ax, apz = z - s.az;
@@ -210,12 +210,13 @@ export class NepalRoads {
         if (t < 0) t = 0; else if (t > 1) t = 1;
         const dx = apx - (s.bx - s.ax) * t, dz = apz - (s.bz - s.az) * t;
         const d2 = dx * dx + dz * dz;
-        if (d2 < bd) { bd = d2; bH = s.hA + (s.hB - s.hA) * t; bw = s.w; }
+        if (d2 < bd) { bd = d2; bH = s.hA + (s.hB - s.hA) * t; bw = s.w; bhw = s.hw || 0; }
       }
       const d = Math.sqrt(bd);
       q.mask = sstep(bw + 2.4, bw * 0.5, d);
       q.shelf = sstep(bw + 17, bw * 0.75, d);
       q.centerH = bH;
+      q.d = d; q.w = bw; q.hw = bhw;
     }
     const barr = this._bgrid.get(key);
     if (barr) {
