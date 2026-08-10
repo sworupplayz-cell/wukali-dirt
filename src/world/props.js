@@ -239,6 +239,100 @@ function waterMill() {
   return merge(parts);
 }
 
+// ---- Phase 3L-1F: crop row strips (one instance = a 5.5 m planted row) ----
+
+function cropBase(r, g, b) {
+  return colorize(new THREE.BoxGeometry(5.6, 0.1, 0.55), r, g, b).translate(0, 0.05, 0);
+}
+
+function rice() {
+  // Paddy row: bright young rice tufts on a wet-mud strip.
+  const parts = [cropBase(0.30, 0.27, 0.20)];
+  for (let i = 0; i < 6; i++) {
+    const x = -2.4 + i * 0.96;
+    parts.push(colorize(new THREE.PlaneGeometry(0.5, 0.62), 0.36, 0.66, 0.26).translate(x, 0.4, 0));
+    parts.push(colorize(new THREE.PlaneGeometry(0.5, 0.62), 0.42, 0.72, 0.3)
+      .rotateY(Math.PI / 2).translate(x, 0.4, 0));
+  }
+  return merge(parts);
+}
+
+function wheat() {
+  // Golden wheat: dense tuft cones on dry soil.
+  const parts = [cropBase(0.52, 0.42, 0.26)];
+  for (let i = 0; i < 6; i++) {
+    const x = -2.4 + i * 0.96;
+    parts.push(colorize(new THREE.ConeGeometry(0.3, 0.85, 5), 0.76, 0.64, 0.3).translate(x, 0.5, 0));
+  }
+  return merge(parts);
+}
+
+function mustard() {
+  // Flowering mustard: green body, vivid yellow crown.
+  const parts = [cropBase(0.42, 0.4, 0.24)];
+  for (let i = 0; i < 6; i++) {
+    const x = -2.4 + i * 0.96;
+    parts.push(colorize(new THREE.ConeGeometry(0.28, 0.6, 5), 0.34, 0.5, 0.2).translate(x, 0.36, 0));
+    parts.push(colorize(new THREE.IcosahedronGeometry(0.22, 0), 0.9, 0.8, 0.2).translate(x, 0.72, 0));
+  }
+  return merge(parts);
+}
+
+function potato() {
+  // Potato ridge: low dark mounds on a raised soil row.
+  const parts = [colorize(new THREE.BoxGeometry(5.6, 0.22, 0.7), 0.45, 0.36, 0.24).translate(0, 0.11, 0)];
+  for (let i = 0; i < 5; i++) {
+    const x = -2.2 + i * 1.1;
+    parts.push(colorize(new THREE.IcosahedronGeometry(0.34, 0), 0.2, 0.36, 0.16)
+      .scale(1, 0.55, 1).translate(x, 0.3, 0));
+  }
+  return merge(parts);
+}
+
+function veg() {
+  // Mixed vegetable row: alternating leafy greens.
+  const parts = [cropBase(0.4, 0.34, 0.22)];
+  for (let i = 0; i < 6; i++) {
+    const x = -2.4 + i * 0.96;
+    const light = i % 2 === 0;
+    parts.push(colorize(new THREE.IcosahedronGeometry(0.26, 0),
+      light ? 0.45 : 0.2, light ? 0.62 : 0.42, light ? 0.25 : 0.18)
+      .scale(1, 0.7, 1).translate(x, 0.24, 0));
+  }
+  return merge(parts);
+}
+
+function tea() {
+  // Tea hedge: rounded clipped bushes in a tight row.
+  const parts = [];
+  for (let i = 0; i < 3; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(1.75, 0.7, 0.85), 0.15, 0.34, 0.18)
+      .translate(-1.85 + i * 1.85, 0.4, 0));
+    parts.push(colorize(new THREE.BoxGeometry(1.85, 0.12, 0.95), 0.19, 0.4, 0.2)
+      .translate(-1.85 + i * 1.85, 0.72, 0));
+  }
+  return merge(parts);
+}
+
+function banana() {
+  // Banana plant: pale trunk, big drooping leaves.
+  const parts = [colorize(new THREE.CylinderGeometry(0.12, 0.18, 1.7, 5), 0.55, 0.56, 0.4).translate(0, 0.85, 0)];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    parts.push(colorize(new THREE.PlaneGeometry(0.5, 1.6), 0.24, 0.5, 0.2)
+      .translate(0, 0.8, 0).rotateX(-0.7).rotateY(a).translate(Math.sin(a) * 0.3, 1.7, Math.cos(a) * 0.3));
+  }
+  return merge(parts);
+}
+
+function channel() {
+  // Simple irrigation channel: a shallow water strip along paddy edges.
+  const water = colorize(new THREE.BoxGeometry(5.6, 0.06, 0.6), 0.3, 0.46, 0.5).translate(0, 0.03, 0);
+  const bankA = colorize(new THREE.BoxGeometry(5.7, 0.14, 0.16), 0.42, 0.36, 0.26).translate(0, 0.07, 0.38);
+  const bankB = colorize(new THREE.BoxGeometry(5.7, 0.14, 0.16), 0.42, 0.36, 0.26).translate(0, 0.07, -0.38);
+  return merge([water, bankA, bankB]);
+}
+
 export const PROP_TYPES = [
   { name: 'pine', build: pine, max: 800 },
   { name: 'tree', build: broadleaf, max: 420 },
@@ -259,6 +353,15 @@ export const PROP_TYPES = [
   // Phase 3L-1 rural world.
   { name: 'corn', build: corn, max: 520, doubleSided: true },
   { name: 'mill', build: waterMill, max: 10 },
+  // Phase 3L-1F crop rows (one instance = one planted row strip).
+  { name: 'rice', build: rice, max: 420, doubleSided: true },
+  { name: 'wheat', build: wheat, max: 420 },
+  { name: 'mustard', build: mustard, max: 320 },
+  { name: 'potato', build: potato, max: 300 },
+  { name: 'veg', build: veg, max: 260 },
+  { name: 'tea', build: tea, max: 380 },
+  { name: 'banana', build: banana, max: 110, doubleSided: true },
+  { name: 'channel', build: channel, max: 120 },
 ];
 
 export const PROP = {};

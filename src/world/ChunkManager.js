@@ -345,24 +345,75 @@ export class ChunkManager {
       }
     }
 
-    // Phase 3L-1: corn fields — clumped rows on flat (non-terraced) farms.
-    for (let k2 = 0; k2 < 20 && c.props.length < MAX_PROPS_PER_CHUNK + 12; k2++) {
-      const x = ox + rng2() * CHUNK_SIZE;
-      const z = oz + rng2() * CHUNK_SIZE;
-      this.gen.sampleInfo(x, z, info);
-      if (info.wFa < 0.4 || info.terr > 0.3) continue;
-      if (info.trail > 0.3 || info.stream > 0.15) continue;
-      if (this.gen.nearFeature(x, z) || inClearing(x, z)) continue;
-      const patch = vnoise(x * 0.03 + 21.4, z * 0.03 - 9.2, this.gen.seed * 13 + 93);
-      if (patch < 0.45) continue;
-      // A short row of clumps reads as a planted field.
-      const a = Math.round(vnoise(x * 0.008, z * 0.008, this.gen.seed + 7) * 4) * (Math.PI / 4);
-      const dx = Math.cos(a), dz = Math.sin(a);
-      const n = 2 + (rng2() * 2 | 0);
-      for (let i = 0; i < n && c.props.length < MAX_PROPS_PER_CHUNK + 12; i++) {
-        const cx2 = x + dx * i * 1.7, cz2 = z + dz * i * 1.7;
-        c.props.push({ t: PROP.corn, x: cx2, y: this.gen.height(cx2, cz2) - 0.05, z: cz2,
-          yaw: rng2() * Math.PI * 2, s: 0.85 + rng2() * 0.35 });
+    // Phase 3L-1F: crop fields — a deterministic 40 m field grid assigns a
+    // crop per suitable cell (matched to elevation/terraces/wetness/hills);
+    // each field plants ORGANIZED ROW STRIPS (one instance = a merged 5.5 m
+    // row of plants). Strips are owned by the chunk containing their
+    // center, all placement derives from field/row indices (chunk-order
+    // independent), and every strip is individually terrain-validated.
+    {
+      const FIELD = 40;
+      let cropCount = 0;
+      const f0x = Math.floor((ox - FIELD) / FIELD), f1x = Math.floor((ox + CHUNK_SIZE + FIELD) / FIELD);
+      const f0z = Math.floor((oz - FIELD) / FIELD), f1z = Math.floor((oz + CHUNK_SIZE + FIELD) / FIELD);
+      for (let fx = f0x; fx <= f1x && cropCount < 18; fx++) {
+        for (let fz = f0z; fz <= f1z && cropCount < 18; fz++) {
+          const crop = this._cropField(fx, fz);
+          if (!crop) continue;
+          const cxc = (fx + 0.5) * FIELD, czc = (fz + 0.5) * FIELD;
+          const dirI = Math.floor(hash01(fx, fz, this.gen.seed * 47 + 5) * 4);
+          const a = dirI * (Math.PI / 4);
+          const rdx = Math.cos(a), rdz = Math.sin(a);        // along the row
+          const pdx = -rdz, pdz = rdx;                       // across rows
+          if (crop === 'banana') {
+            // Fruit grove: a loose cluster instead of rows.
+            for (let i = 0; i < 5; i++) {
+              const x = cxc + (hash01(fx * 7 + i, fz, this.gen.seed + 61) - 0.5) * 22;
+              const z = czc + (hash01(fx, fz * 7 + i, this.gen.seed + 62) - 0.5) * 22;
+              if (x < ox || x >= ox + CHUNK_SIZE || z < oz || z >= oz + CHUNK_SIZE) continue;
+              if (!this._cropSpotOk(x, z, info, 0.25)) continue;
+              c.props.push({ t: PROP.banana, x, y: this.gen.height(x, z) - 0.1, z,
+                yaw: hash01(i, fx + fz, 9) * 6.28, s: 0.9 + hash01(i, fx - fz, 10) * 0.35 });
+              cropCount++;
+            }
+            continue;
+          }
+          const rows = 4, segs = 3;
+          const rowGap = crop === 'tea' ? 3.4 : 2.9;
+          for (let rI = 0; rI < rows; rI++) {
+            for (let sI = 0; sI < segs; sI++) {
+              const off = (rI - (rows - 1) / 2) * rowGap;
+              const along = (sI - (segs - 1) / 2) * 6.1;
+              const x = cxc + rdx * along + pdx * off;
+              const z = czc + rdz * along + pdz * off;
+              if (x < ox || x >= ox + CHUNK_SIZE || z < oz || z >= oz + CHUNK_SIZE) continue;
+              if (!this._cropSpotOk(x, z, info, crop === 'rice' ? 0.5 : 0.25)) continue;
+              if (inClearing(x, z)) continue;
+              if (crop === 'corn') {
+                // Corn rows reuse the clump prop, two clumps per segment.
+                for (const dd of [-1.4, 1.4]) {
+                  c.props.push({ t: PROP.corn, x: x + rdx * dd, z: z + rdz * dd,
+                    y: this.gen.height(x + rdx * dd, z + rdz * dd) - 0.05,
+                    yaw: hash01(rI * 7 + sI, fx + fz, 11) * 6.28, s: 0.9 + hash01(sI, rI, 12) * 0.3 });
+                }
+              } else {
+                c.props.push({ t: PROP[crop], x, y: this.gen.height(x, z) - 0.12, z,
+                  yaw: a, s: 0.95 + hash01(rI * 5 + sI, fx * 3 + fz, 13) * 0.15 });
+              }
+              cropCount++;
+            }
+          }
+          // Paddies get a simple irrigation channel along the field edge.
+          if (crop === 'rice') {
+            const chx = cxc + pdx * ((rows + 0.6) / 2) * rowGap;
+            const chz = czc + pdz * ((rows + 0.6) / 2) * rowGap;
+            if (chx >= ox && chx < ox + CHUNK_SIZE && chz >= oz && chz < oz + CHUNK_SIZE &&
+                this._cropSpotOk(chx, chz, info, 0.6)) {
+              c.props.push({ t: PROP.channel, x: chx, y: this.gen.height(chx, chz) - 0.04, z: chz,
+                yaw: a, s: 1.6 });
+            }
+          }
+        }
       }
     }
 
@@ -454,6 +505,46 @@ export class ChunkManager {
       c.props.push(prop);
       if (collR > 0) c.colliders.push({ x, z, r: collR });
     }
+  }
+
+  /**
+   * Crop for a 40 m field cell, or null (Phase 3L-1F). Deterministic and
+   * matched to terrain: rice on wet terraced lowland, wheat/mustard on low
+   * flat farms, veg beside villages, tea on eastern-style hills, potatoes
+   * on cooler high ground, corn through the village farm belt.
+   */
+  _cropField(fx, fz) {
+    if (hash01(fx, fz, this.gen.seed * 53 + 17) > 0.55) return null;
+    const info = this._info;
+    const x = (fx + 0.5) * 40, z = (fz + 0.5) * 40;
+    this.gen.sampleInfo(x, z, info);
+    if (info.mtn > 0.02 || info.trail > 0.45 || info.stream > 0.55) return null;
+    const h = info.h;
+    const ny = this._normalY(x, z);
+    if (ny < 0.87) return null;
+    const pick = hash01(fz, fx, this.gen.seed * 59 + 23);
+    if (info.terr > 0.3 && h < 9 && info.lo > 0.6) return 'rice';
+    if (h < 5 && info.lo > 0.8 && info.wFa > 0.3 && pick < 0.4) return 'banana';
+    if (this.villages) {
+      const nv = this.villages.nearest(x, z, 1);
+      if (nv && nv.d < 150 && nv.d > 45 && pick < 0.5) return 'veg';
+    }
+    if (info.wFa > 0.45 && info.terr < 0.3 && h < 13) return pick < 0.55 ? 'wheat' : 'mustard';
+    // Elevation windows match THIS world's lowland relief (roughly -5..+15 m
+    // off the mountain domes): tea takes the upper hillsides, potatoes the
+    // coolest high ground.
+    if (info.wH > 0.5 && h >= 6 && ny > 0.9 && pick < 0.6) return 'tea';
+    if (h >= 9 && info.wH + info.wRk > 0.55) return 'potato';
+    if (info.wFa + info.wH > 0.55 && h >= 4 && h <= 26) return 'corn';
+    return null;
+  }
+
+  /** A single crop strip must sit on plantable ground. */
+  _cropSpotOk(x, z, info, streamLim) {
+    this.gen.sampleInfo(x, z, info);
+    if (info.trail > 0.3 || info.stream > streamLim || info.mtn > 0.02) return false;
+    if (this.gen.nearFeature(x, z)) return false;
+    return this._normalY(x, z) > 0.88;
   }
 
   _normalY(x, z) {
