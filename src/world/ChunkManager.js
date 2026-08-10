@@ -319,13 +319,12 @@ export class ChunkManager {
           if (this.water && this.water.submerged(it.x, it.z, iy)) continue; // W-3D
           // W-3G (nepal): houses get deterministic scale variants (audited
           // up to believable proportions) and never overlap planned roads.
-          let sMul = 1;
-          if (this.gen.macro && it.type === 'house') {
-            if (this.gen.macro.roads &&
-                this.gen.macro.roads.query(it.x, it.z).mask > 0.35) continue;
-            const hs = hash01(Math.round(it.x * 3), Math.round(it.z * 3), this.gen.seed * 37 + 91);
-            sMul = hs < 0.3 ? 1.45 : hs < 0.65 ? 1.6 : hs < 0.9 ? 1.75 : 1.9; // W-3I real-scale audit
-          }
+          // W-3K: size variants are baked at generation time now; inject
+          // only guards buildings against the planned road surface.
+          const sMul = 1;
+          if (this.gen.macro && (it.type === 'houseN' || it.type === 'townhouseN') &&
+              this.gen.macro.roads &&
+              this.gen.macro.roads.query(it.x, it.z).mask > 0.35) continue;
           const prop = { t: PROP[it.type], x: it.x, y: iy - it.sink,
             z: it.z, yaw: it.yaw, s: it.s * sMul };
           if (it.rx) prop.rx = it.rx; // terrain-pitched strips (city streets)
@@ -334,10 +333,13 @@ export class ChunkManager {
         }
       }
     };
-    if (this.villages) inject(this.villages.forChunk(ox, oz, CHUNK_SIZE));
-    if (this.towns) inject(this.towns.forChunk(ox, oz, CHUNK_SIZE));
-    if (this.cities) inject(this.cities.forChunk(ox, oz, CHUNK_SIZE));
-    if (this.industry) inject(this.industry.forChunk(ox, oz, CHUNK_SIZE));
+    // W-3K: in the Nepal world the roadside hierarchy IS the settlement
+    // system; the legacy procedural settlements only exist in ?world=default.
+    const legacy = !this.gen.macro;
+    if (this.villages && legacy) inject(this.villages.forChunk(ox, oz, CHUNK_SIZE));
+    if (this.towns && legacy) inject(this.towns.forChunk(ox, oz, CHUNK_SIZE));
+    if (this.cities && legacy) inject(this.cities.forChunk(ox, oz, CHUNK_SIZE));
+    if (this.industry && legacy) inject(this.industry.forChunk(ox, oz, CHUNK_SIZE));
     if (this.roadside) inject(this.roadside.forChunk(ox, oz, CHUNK_SIZE));
     const inClearing = (x, z) => {
       if (!clearings) return false;
@@ -544,10 +546,18 @@ export class ChunkManager {
         t = PROP.bush; s *= 0.55; collR = 0;
       }
 
+      // W-3K: biome species — warm lowland forest grows tall sal trees
+      // (straight trunk, high canopy) instead of generic pines.
+      if (this.gen.macro && (t === PROP.pine || t === PROP.tree) &&
+          info.h < 26 && info.wF > 0.3 && info.dry < 0.5) {
+        const hs2 = hash01(Math.round(x * 3), Math.round(z * 3), this.gen.seed * 41 + 63);
+        if (hs2 < 0.6) { t = PROP.sal; s = 0.8 + hs2 * 0.7; collR = 0.55 * s; }
+      }
+
       // Phase W-3C tree scale classes: small / medium / large / tall forest
       // giants. Scale comes from a POSITION hash (zero extra rng draws), so
       // every legacy placement stays bit-identical — only sizes enrich.
-      if (t === PROP.pine || t === PROP.tree) {
+      if ((t === PROP.pine || t === PROP.tree) && t !== PROP.sal) {
         const hc = hash01(Math.round(x * 5), Math.round(z * 5), this.gen.seed * 29 + 77);
         const forest = Math.min(1, info.wF * 1.3 + (info.mtn > 0.04 ? 0.5 : 0));
         let cls = hc < 0.30 ? 0.85 : hc < 0.70 ? 1.05 : hc < 0.92 ? 1.35

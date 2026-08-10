@@ -718,6 +718,170 @@ function bigStand() {
   return merge(parts);
 }
 
+// ---- Phase W-3K: real-scale building set (metres, bike = 2.05 m ref) -------
+// These are NOT scaled-up copies: doors ~1.0x2.1, windows ~1.2x1.1, floors
+// 3.0-3.2 m — sub-elements stay human-sized while footprints hit real-world
+// building dimensions. Used by the Nepal world generators.
+
+function houseN() {
+  // Nepali rural house: 9.5 x 7.5 m, one 3.0 m floor + hipped roof (~5.8 m).
+  const parts = [
+    colorize(new THREE.BoxGeometry(9.5, 3.0, 7.5), 0.80, 0.68, 0.52).translate(0, 1.5, 0),
+    colorize(new THREE.BoxGeometry(9.7, 0.5, 7.7), 0.55, 0.30, 0.20).translate(0, 0.25, 0),
+    colorize(new THREE.ConeGeometry(6.9, 2.8, 4), 0.34, 0.26, 0.22)
+      .rotateY(Math.PI / 4).translate(0, 4.35, 0),
+    colorize(new THREE.BoxGeometry(1.0, 2.1, 0.12), 0.25, 0.17, 0.10).translate(1.6, 1.05, 3.78),
+    colorize(new THREE.BoxGeometry(1.3, 1.1, 0.1), 0.20, 0.22, 0.26).translate(-2.2, 1.8, 3.78),
+    colorize(new THREE.BoxGeometry(1.3, 1.1, 0.1), 0.20, 0.22, 0.26).translate(-2.2, 1.8, -3.78),
+  ];
+  return merge(parts);
+}
+function townhouseN() {
+  // Two-storey bazaar townhouse: 8 x 9 m, floors 3.2 m, flat roof + parapet.
+  const parts = [
+    colorize(new THREE.BoxGeometry(8, 3.2, 9), 0.74, 0.60, 0.50).translate(0, 1.6, 0),
+    colorize(new THREE.BoxGeometry(8, 3.0, 9), 0.80, 0.68, 0.56).translate(0, 4.7, 0),
+    colorize(new THREE.BoxGeometry(8.3, 0.35, 9.3), 0.45, 0.42, 0.40).translate(0, 6.35, 0),
+    colorize(new THREE.BoxGeometry(8.2, 0.5, 0.25), 0.45, 0.42, 0.40).translate(0, 6.6, 4.5),
+    colorize(new THREE.BoxGeometry(1.1, 2.2, 0.12), 0.22, 0.15, 0.1).translate(-2.4, 1.1, 4.52),
+    colorize(new THREE.BoxGeometry(2.6, 2.4, 0.14), 0.1, 0.1, 0.12).translate(1.6, 1.2, 4.52),
+    colorize(new THREE.BoxGeometry(1.4, 1.3, 0.1), 0.2, 0.28, 0.4).translate(-2.0, 4.8, 4.52),
+    colorize(new THREE.BoxGeometry(1.4, 1.3, 0.1), 0.2, 0.28, 0.4).translate(2.0, 4.8, 4.52),
+    colorize(new THREE.BoxGeometry(4.4, 0.18, 1.4), 0.6, 0.5, 0.4).translate(0, 3.35, 5.0),
+  ];
+  return merge(parts);
+}
+function cityAN() {
+  // Concrete-frame city block: 16 x 12 m footprint, 5 floors (15.8 m).
+  const parts = [
+    colorize(new THREE.BoxGeometry(16, 15.8, 12), 0.72, 0.66, 0.60).translate(0, 7.9, 0),
+    colorize(new THREE.BoxGeometry(16.3, 0.5, 12.3), 0.5, 0.47, 0.44).translate(0, 16, 0),
+    colorize(new THREE.BoxGeometry(3.2, 3.0, 0.2), 0.10, 0.10, 0.12).translate(0, 1.5, 6.05),
+  ];
+  for (let f = 0; f < 5; f++) {
+    parts.push(colorize(new THREE.BoxGeometry(14.6, 1.35, 0.15), 0.18, 0.26, 0.38)
+      .translate(0, 4.8 + f * 3.1 - 2.9, 6.06));
+    parts.push(colorize(new THREE.BoxGeometry(0.15, 1.35, 10.8), 0.18, 0.26, 0.38)
+      .translate(8.03, 4.8 + f * 3.1 - 2.9, 0));
+  }
+  return merge(parts);
+}
+function cityBN() {
+  // Brick tower: 12 x 10 m, 6 floors (18.6 m) with pilasters + shopfront.
+  const parts = [
+    colorize(new THREE.BoxGeometry(12, 18.6, 10), 0.60, 0.34, 0.26).translate(0, 9.3, 0),
+    colorize(new THREE.BoxGeometry(12.3, 0.55, 10.3), 0.44, 0.26, 0.2).translate(0, 18.9, 0),
+    colorize(new THREE.BoxGeometry(11.4, 3.0, 0.25), 0.14, 0.14, 0.16).translate(0, 1.5, 5.06),
+    colorize(new THREE.BoxGeometry(0.5, 18.6, 0.4), 0.5, 0.28, 0.22).translate(-6.05, 9.3, 0),
+    colorize(new THREE.BoxGeometry(0.5, 18.6, 0.4), 0.5, 0.28, 0.22).translate(6.05, 9.3, 0),
+  ];
+  for (let f = 1; f < 6; f++) {
+    parts.push(colorize(new THREE.BoxGeometry(10.6, 1.4, 0.15), 0.75, 0.78, 0.82)
+      .translate(0, 1.7 + f * 3.1, 5.07));
+  }
+  return merge(parts);
+}
+function shopN() {
+  // Roadside shop: 6 x 5 m, 3.4 m, full-width shutter + sign band.
+  return merge([
+    colorize(new THREE.BoxGeometry(6, 3.4, 5), 0.62, 0.58, 0.55).translate(0, 1.7, 0),
+    colorize(new THREE.BoxGeometry(4.6, 2.5, 0.15), 0.42, 0.44, 0.47).translate(0, 1.25, 2.52),
+    colorize(new THREE.BoxGeometry(5.9, 0.8, 0.14), 0.85, 0.3, 0.2).translate(0, 3.0, 2.54),
+    colorize(new THREE.BoxGeometry(6.3, 0.16, 5.6), 0.4, 0.38, 0.36).translate(0, 3.5, 0.2),
+  ]);
+}
+function teashopN() {
+  // Chiya pasal: 4.5 x 4 m with a small awning and bench.
+  return merge([
+    colorize(new THREE.BoxGeometry(4.5, 3.0, 4), 0.66, 0.5, 0.38).translate(0, 1.5, 0),
+    colorize(new THREE.BoxGeometry(2.0, 2.1, 0.12), 0.16, 0.12, 0.1).translate(0.6, 1.05, 2.02),
+    colorize(new THREE.BoxGeometry(4.9, 0.14, 1.9), 0.3, 0.5, 0.3).rotateX(0.16).translate(0, 3.15, 1.7),
+    colorize(new THREE.BoxGeometry(2.2, 0.45, 0.5), 0.45, 0.32, 0.2).translate(-1.0, 0.45, 2.6),
+  ]);
+}
+function schoolN() {
+  // Two-storey school block: 18 x 6.5 m (6.4 m) + veranda posts.
+  const parts = [
+    colorize(new THREE.BoxGeometry(18, 6.4, 6.5), 0.85, 0.82, 0.74).translate(0, 3.2, 0),
+    colorize(new THREE.BoxGeometry(18.4, 0.45, 7.0), 0.4, 0.45, 0.6).translate(0, 6.6, 0),
+    colorize(new THREE.BoxGeometry(18.2, 0.2, 2.0), 0.5, 0.47, 0.44).translate(0, 3.25, 4.0),
+  ];
+  for (let k = 0; k < 5; k++) {
+    parts.push(colorize(new THREE.BoxGeometry(1.15, 1.5, 0.12), 0.2, 0.25, 0.35)
+      .translate(-7 + k * 3.5, 4.7, 3.28));
+    parts.push(colorize(new THREE.BoxGeometry(1.15, 1.9, 0.12), 0.2, 0.25, 0.35)
+      .translate(-7 + k * 3.5, 1.4, 3.28));
+    parts.push(colorize(new THREE.BoxGeometry(0.22, 3.2, 0.22), 0.6, 0.57, 0.52)
+      .translate(-8 + k * 4, 1.6, 4.9));
+  }
+  return merge(parts);
+}
+function clinicN() {
+  // Health post: 10 x 7 m, 3.4 m, red cross.
+  return merge([
+    colorize(new THREE.BoxGeometry(10, 3.4, 7), 0.90, 0.90, 0.88).translate(0, 1.7, 0),
+    colorize(new THREE.BoxGeometry(10.4, 0.4, 7.4), 0.55, 0.6, 0.65).translate(0, 3.7, 0),
+    colorize(new THREE.BoxGeometry(1.5, 0.45, 0.14), 0.85, 0.2, 0.18).translate(0, 2.8, 3.53),
+    colorize(new THREE.BoxGeometry(0.45, 1.5, 0.14), 0.85, 0.2, 0.18).translate(0, 2.8, 3.53),
+    colorize(new THREE.BoxGeometry(1.2, 2.2, 0.12), 0.2, 0.25, 0.3).translate(-2.6, 1.1, 3.52),
+  ]);
+}
+function fuelN() {
+  // Petrol pump: 12 x 8 m canopy at 5.2 m, two pumps, kiosk.
+  const parts = [
+    colorize(new THREE.BoxGeometry(12, 0.5, 8), 0.85, 0.25, 0.2).translate(0, 5.2, 0),
+    colorize(new THREE.BoxGeometry(4, 2.9, 3), 0.7, 0.68, 0.64).translate(-3.4, 1.45, -2),
+  ];
+  for (const px of [-2.4, 2.4]) {
+    parts.push(colorize(new THREE.BoxGeometry(0.3, 5.0, 0.3), 0.72, 0.72, 0.75).translate(px, 2.5, 2.8));
+    parts.push(colorize(new THREE.BoxGeometry(0.3, 5.0, 0.3), 0.72, 0.72, 0.75).translate(px, 2.5, -2.8));
+    parts.push(colorize(new THREE.BoxGeometry(0.9, 1.5, 0.55), 0.8, 0.3, 0.2).translate(px + 1.1, 0.75, 0.4));
+    parts.push(colorize(new THREE.BoxGeometry(0.5, 0.4, 0.3), 0.9, 0.9, 0.9).translate(px + 1.1, 1.35, 0.62));
+  }
+  return merge(parts);
+}
+function busstopN() {
+  // Highway shelter: 4 x 2 m, 2.6 m, bench.
+  return merge([
+    colorize(new THREE.BoxGeometry(0.18, 2.6, 0.18), 0.55, 0.57, 0.6).translate(-1.85, 1.3, -0.8),
+    colorize(new THREE.BoxGeometry(0.18, 2.6, 0.18), 0.55, 0.57, 0.6).translate(1.85, 1.3, -0.8),
+    colorize(new THREE.BoxGeometry(4.2, 0.16, 2.2), 0.3, 0.45, 0.65).rotateX(-0.1).translate(0, 2.6, 0),
+    colorize(new THREE.BoxGeometry(4.0, 1.4, 0.14), 0.6, 0.62, 0.6).translate(0, 1.5, -0.9),
+    colorize(new THREE.BoxGeometry(3.2, 0.1, 0.5), 0.5, 0.38, 0.24).translate(0, 0.55, -0.5),
+  ]);
+}
+function poleN() {
+  // Distribution pole: 10 m with two crossarms and insulators.
+  return merge([
+    colorize(new THREE.CylinderGeometry(0.11, 0.16, 10, 5), 0.4, 0.36, 0.32).translate(0, 5, 0),
+    colorize(new THREE.BoxGeometry(2.2, 0.14, 0.14), 0.35, 0.32, 0.28).translate(0, 9.1, 0),
+    colorize(new THREE.BoxGeometry(1.7, 0.12, 0.12), 0.35, 0.32, 0.28).translate(0, 8.2, 0),
+    colorize(new THREE.BoxGeometry(0.1, 0.22, 0.1), 0.7, 0.72, 0.75).translate(-0.9, 9.25, 0),
+    colorize(new THREE.BoxGeometry(0.1, 0.22, 0.1), 0.7, 0.72, 0.75).translate(0.9, 9.25, 0),
+  ]);
+}
+function salTree() {
+  // Sal (Shorea robusta): tall straight trunk, high domed canopy (~13 m).
+  const parts = [
+    colorize(new THREE.CylinderGeometry(0.28, 0.42, 7.5, 6), 0.38, 0.30, 0.22).translate(0, 3.75, 0),
+    colorize(new THREE.IcosahedronGeometry(2.9, 0), 0.16, 0.34, 0.14)
+      .scale(1.25, 0.85, 1.25).translate(0, 9.2, 0),
+    colorize(new THREE.IcosahedronGeometry(2.1, 0), 0.2, 0.4, 0.17)
+      .scale(1.1, 0.8, 1.1).translate(1.4, 11.2, 0.6),
+  ];
+  return merge(parts);
+}
+function bridgeDeckN() {
+  // Two-lane bridge deck: 6.8 m wide x 12.6 m, curbs + edge beams.
+  return merge([
+    colorize(new THREE.BoxGeometry(6.8, 0.22, 12.6), 0.52, 0.50, 0.48).translate(0, 0.11, 0),
+    colorize(new THREE.BoxGeometry(0.45, 0.5, 12.6), 0.42, 0.40, 0.38).translate(-3.2, 0.3, 0),
+    colorize(new THREE.BoxGeometry(0.45, 0.5, 12.6), 0.42, 0.40, 0.38).translate(3.2, 0.3, 0),
+    colorize(new THREE.BoxGeometry(6.9, 0.35, 0.4), 0.45, 0.42, 0.4).translate(0, 0.1, 6.2),
+    colorize(new THREE.BoxGeometry(6.9, 0.35, 0.4), 0.45, 0.42, 0.4).translate(0, 0.1, -6.2),
+  ]);
+}
+
 export const PROP_TYPES = [
   { name: 'pine', build: pine, max: 800 },
   { name: 'tree', build: broadleaf, max: 420 },
@@ -779,6 +943,20 @@ export const PROP_TYPES = [
   { name: 'pile', build: pile, max: 20 },
   { name: 'frame', build: conFrame, max: 6 },
   { name: 'bigstand', build: bigStand, max: 26 },
+  // Phase W-3K real-scale Nepal building set.
+  { name: 'houseN', build: houseN, max: 64 },
+  { name: 'townhouseN', build: townhouseN, max: 60 },
+  { name: 'cityAN', build: cityAN, max: 26 },
+  { name: 'cityBN', build: cityBN, max: 28 },
+  { name: 'shopN', build: shopN, max: 40 },
+  { name: 'teashopN', build: teashopN, max: 28 },
+  { name: 'schoolN', build: schoolN, max: 8 },
+  { name: 'clinicN', build: clinicN, max: 8 },
+  { name: 'fuelN', build: fuelN, max: 8 },
+  { name: 'busstopN', build: busstopN, max: 16 },
+  { name: 'poleN', build: poleN, max: 110 },
+  { name: 'sal', build: salTree, max: 240 },
+  { name: 'bridgeN', build: bridgeDeckN, max: 30 },
 ];
 
 export const PROP = {};

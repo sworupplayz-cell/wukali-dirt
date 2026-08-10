@@ -118,6 +118,35 @@ export class NepalRoadside {
     };
     const infraOk = (x, z) =>
       slopeOk(x, z, 0.6) && !water.submerged(x, z, gen.height(x, z));
+    // W-3K: house size variants baked at generation time (same hash the
+    // inject pass used) so the separation registry sees TRUE dimensions.
+    const houseVar = (x, z) => {
+      const hs = hash01(Math.round(x * 3), Math.round(z * 3), 20 * 37 + 91);
+      return hs < 0.3 ? 0.85 : hs < 0.65 ? 1.0 : hs < 0.9 ? 1.15 : 1.3;
+    };
+    const thVar = (x, z) => {
+      const hs = hash01(Math.round(x * 3), Math.round(z * 3), 20 * 37 + 91);
+      return hs < 0.5 ? 0.95 : 1.08;
+    };
+    // W-3K: building separation registry — no overlapping structures, ever.
+    const bGrid = new Map();
+    const bKey = (x, z) => Math.floor(x / 32) * 100003 + Math.floor(z / 32);
+    const bClear = (x, z, rad) => {
+      for (let gx = -1; gx <= 1; gx++) for (let gz = -1; gz <= 1; gz++) {
+        const cell = bGrid.get(bKey(x + gx * 32, z + gz * 32));
+        if (!cell) continue;
+        for (const b of cell) {
+          if (Math.hypot(x - b.x, z - b.z) < (rad + b.r) * 0.85) return false;
+        }
+      }
+      return true;
+    };
+    const bAdd = (x, z, rad) => {
+      const k = bKey(x, z);
+      let cell = bGrid.get(k);
+      if (!cell) bGrid.set(k, (cell = []));
+      cell.push({ x, z, r: rad });
+    };
 
     for (const route of roads.routes) {
       const hw = route.kind === 'highway';
@@ -154,26 +183,31 @@ export class NepalRoadside {
         }
         if (hw && i % 5 === 2) {
           const gx = p.x + px * -side * (off + 0.8), gz = p.z + pz * -side * (off + 0.8);
-          if (infraOk(gx, gz)) put(gx, gz, it('pole', gx, gz, yawR, 1, 0.25, 0.25));
+          if (infraOk(gx, gz)) put(gx, gz, it('poleN', gx, gz, yawR, 1, 0.3, 0.3));
         }
         // Bus stops on highways every ~22 nodes.
         if (hw && i % 22 === 11 && h < 0.8) {
           const bx = p.x + px * side * (off + 1.2), bz = p.z + pz * side * (off + 1.2);
-          if (infraOk(bx, bz)) put(bx, bz, it('busstop', bx, bz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1.1, 0, 0.2));
+          if (infraOk(bx, bz) && bClear(bx, bz, 2.4)) {
+            bAdd(bx, bz, 2.4);
+            put(bx, bz, it('busstopN', bx, bz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 0.5, 0.2));
+          }
         }
         // Fuel stations every ~37 highway nodes.
         if (hw && i % 37 === 18 && h < 0.7) {
-          const fx = p.x + px * side * (off + 4), fz = p.z + pz * side * (off + 4);
-          if (infraOk(fx, fz)) {
-            put(fx, fz, it('fuel', fx, fz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1.2, 1.6, 0.2));
+          const fx = p.x + px * side * (off + 8), fz = p.z + pz * side * (off + 8);
+          if (infraOk(fx, fz) && bClear(fx, fz, 7)) {
+            bAdd(fx, fz, 7);
+            put(fx, fz, it('fuelN', fx, fz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 2.0, 0.2));
             put(fx, fz, it('parklot', fx + px * side * 6, fz + pz * side * 6, yawR, 1, 0, 0.12));
           }
         }
         // Rest areas (chiya pasal + parking) every ~29 nodes.
         if (i % 29 === 7 && h < 0.6) {
-          const rx = p.x + px * side * (off + 3), rz = p.z + pz * side * (off + 3);
-          if (infraOk(rx, rz)) {
-            put(rx, rz, it('teashop', rx, rz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1.4, 2.2, 0.2));
+          const rx = p.x + px * side * (off + 5.5), rz = p.z + pz * side * (off + 5.5);
+          if (infraOk(rx, rz) && bClear(rx, rz, 3.2)) {
+            bAdd(rx, rz, 3.2);
+            put(rx, rz, it('teashopN', rx, rz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 2.6, 0.2));
             put(rx, rz, it('parklot', rx + dx * 9, rz + dz * 9, yawR, 1, 0, 0.12));
           }
         }
@@ -213,10 +247,12 @@ export class NepalRoadside {
     };
     const hCls = (x, z) => {
       const h = hash01(Math.round(x * 3), Math.round(z * 3), SALT + 41);
-      return h < 0.35 ? 1.45 : h < 0.7 ? 1.55 : 1.65; // real 2-storey townhouses
+      return h < 0.35 ? 0.9 : h < 0.7 ? 1.0 : 1.1; // townhouseN is real-scale
     };
-    const SVC_S = { school: 1.8, clinic: 1.5, shop: 1.5, teashop: 1.4, stall: 1.2,
-      fuel: 1.2, stupa: 1.2, busstop: 1.1, parklot: 1.3, wall: 1.1, flagpole: 1 };
+    const SVC_S = { schoolN: 1, clinicN: 1, shopN: 1, teashopN: 1, stall: 1.2,
+      fuelN: 1, stupa: 1.2, busstopN: 1, parklot: 1.3, wall: 1.1, flagpole: 1 };
+    const SVC_R = { schoolN: 7.5, clinicN: 4.6, shopN: 3.4, teashopN: 2.6, stall: 1.2,
+      fuelN: 2.0, stupa: 1.1, busstopN: 0.5, parklot: 0, wall: 0.9, flagpole: 0.3 };
     /** Lay a settlement strip along `route` starting at node i0. */
     const buildSettlement = (route, i0, kind, cfg) => {
       const pts = route.pts;
@@ -241,17 +277,20 @@ export class NepalRoadside {
               const hh = hash01(i * 31 + k * 7 + row * 3 + side + 1,
                 Math.round(p.x * 0.01), SALT + 43);
               if (hh > cfg.density) continue;
-              const off = route.w + 7.5 + row * 9 + hh * 3;
+              const off = route.w + 13 + row * 14 + hh * 3; // real setbacks
               const hx = p.x + dx * along * len + px * side * off;
               const hz = p.z + dz * along * len + pz * side * off;
               if (!spotOk(hx, hz)) continue;
-              const rec = recFor(hx, hz, 14);
+              const rec = recFor(hx, hz, 20);
               const yawFace = yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
               const pickT = hash01(Math.round(hx), Math.round(hz), SALT + 47);
-              const typ = kind === 'hamlet' || pickT < cfg.plainHouse ? 'house'
-                : pickT < cfg.plainHouse + 0.5 * (1 - cfg.plainHouse) ? 'townhouseA' : 'townhouseB';
-              rec.items.push(it(typ, hx, hz, yawFace, typ === 'house' ? 1 : hCls(hx, hz),
-                typ === 'house' ? 2.4 : 2.6, 0.22));
+              const typ = kind === 'hamlet' || pickT < cfg.plainHouse ? 'houseN' : 'townhouseN';
+              const sB = typ === 'houseN' ? houseVar(hx, hz) : hCls(hx, hz) * thVar(hx, hz);
+              const rB = (typ === 'houseN' ? 4.3 : 4.6) * sB;
+              if (!bClear(hx, hz, rB)) continue;
+              bAdd(hx, hz, rB);
+              rec.items.push(it(typ, hx, hz, yawFace, sB,
+                typ === 'houseN' ? 4.3 : 4.6, 0.28));
               placedH++;
               nodeH++;
             }
@@ -262,16 +301,14 @@ export class NepalRoadside {
           while (sList.length && placedS < cfg.services.length) {
             const typ = sList.shift();
             const side = (placedS & 1) ? -1 : 1;
-            const sx = p.x + px * side * (route.w + 6.5) + dx * placedS * 9;
-            const sz = p.z + pz * side * (route.w + 6.5) + dz * placedS * 9;
-            if (spotOk(sx, sz, 0.5)) {
-              const rec = recFor(sx, sz, 12);
-              const collR = typ === 'school' ? 3.8 : typ === 'clinic' ? 2.4
-                : typ === 'fuel' ? 1.6 : typ === 'stall' ? 1.2 : typ === 'stupa' ? 1.1
-                : typ === 'busstop' || typ === 'flagpole' || typ === 'parklot' ? 0.3 : 2.2;
+            const sx = p.x + px * side * (route.w + 9) + dx * placedS * 13;
+            const sz = p.z + pz * side * (route.w + 9) + dz * placedS * 13;
+            if (spotOk(sx, sz, 0.5) && bClear(sx, sz, (SVC_R[typ] || 2.2) * (SVC_S[typ] || 1))) {
+              bAdd(sx, sz, (SVC_R[typ] || 2.2) * (SVC_S[typ] || 1));
+              const rec = recFor(sx, sz, 16);
               rec.items.push(it(typ, sx, sz,
                 Math.atan2(dx, dz) + (side > 0 ? -Math.PI / 2 : Math.PI / 2),
-                SVC_S[typ] || 1, collR, 0.2));
+                SVC_S[typ] || 1, SVC_R[typ] !== undefined ? SVC_R[typ] : 2.2, 0.2));
               placedS++;
             } else {
               placedS++;
@@ -295,12 +332,12 @@ export class NepalRoadside {
     // undersized; corrected via per-type scales — KTM towers ≈ 9x8 m
     // footprint and 18-22 m tall, shops ≈ 4.5-6 m fronts, streets 6.2 m).
     const CITY_CFG = {
-      kathmandu: { towerS: 2.2, dense: 1.0, industrial: false, landmark: 'temple' },
-      pokhara: { towerS: 1.8, dense: 0.8, industrial: false, landmark: 'lakeside' },
-      bharatpur: { towerS: 1.7, dense: 0.75, industrial: true, landmark: 'market' },
-      butwal: { towerS: 1.8, dense: 0.8, industrial: true, landmark: 'stupa' },
-      biratnagar: { towerS: 1.7, dense: 0.8, industrial: 'heavy', landmark: 'stadium' },
-      nepalgunj: { towerS: 1.7, dense: 0.75, industrial: true, landmark: 'market' },
+      kathmandu: { towerS: 1.2, dense: 1.0, industrial: false, landmark: 'temple' },
+      pokhara: { towerS: 1.0, dense: 0.8, industrial: false, landmark: 'lakeside' },
+      bharatpur: { towerS: 0.9, dense: 0.75, industrial: true, landmark: 'market' },
+      butwal: { towerS: 1.0, dense: 0.8, industrial: true, landmark: 'stupa' },
+      biratnagar: { towerS: 0.9, dense: 0.8, industrial: 'heavy', landmark: 'stadium' },
+      nepalgunj: { towerS: 0.9, dense: 0.75, industrial: true, landmark: 'market' },
     };
     const buildCity = (route, iC, cityId, cfg) => {
       const pts = route.pts;
@@ -309,7 +346,9 @@ export class NepalRoadside {
       let nB = 0;
       const putB = (typ, x, z, yaw, sc, collR) => {
         if (!spotOk(x, z, 0.5)) return false;
-        recFor(x, z, 13).items.push(it(typ, x, z, yaw, sc, collR, 0.25));
+        if (!bClear(x, z, collR * sc)) return false; // W-3K: no overlaps, ever
+        bAdd(x, z, collR * sc);
+        recFor(x, z, 18).items.push(it(typ, x, z, yaw, sc, collR, 0.25));
         nB++;
         return true;
       };
@@ -326,29 +365,32 @@ export class NepalRoadside {
         // Main-street frontage.
         for (const side of [-1, 1]) {
           const face = yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
-          const nPos = zone === 'core' ? 5 : 4;
+          const nPos = zone === 'core' ? 4 : 5; // 16 m blocks need ~27 m pitch
           for (let k = 0; k < nPos; k++) {
             const h = H(i * 41 + k * 7 + side + 1, p.x);
             if (h > (zone === 'core' ? 0.9 : 0.72) * cfg.dense) continue;
             const along = (k + 0.5) / nPos;
-            const bx = p.x + dx * along * len + px * side * (14 + h * 3);
-            const bz = p.z + dz * along * len + pz * side * (14 + h * 3);
-            if (zone === 'core') {
-              const typ = h < 0.45 ? 'cityA' : 'cityB';
-              putB(typ, bx, bz, face, cfg.towerS * (0.93 + h * 0.18), 2.35);
+            const core = zone === 'core';
+            const bx = p.x + dx * along * len + px * side * ((core ? 17 : 15) + h * 3);
+            const bz = p.z + dz * along * len + pz * side * ((core ? 17 : 15) + h * 3);
+            if (core) {
+              const typ = h < 0.45 ? 'cityAN' : 'cityBN';
+              putB(typ, bx, bz, face, cfg.towerS * (0.93 + h * 0.18),
+                typ === 'cityAN' ? 8.5 : 6.8);
             } else if (zone === 'commercial') {
-              const typ = h < 0.3 ? 'shop' : h < 0.45 ? 'teashop'
-                : h < 0.75 ? 'townhouseA' : 'townhouseB';
-              putB(typ, bx, bz, face, typ === 'shop' || typ === 'teashop' ? 1.5 : 1.55, 2.4);
+              const typ = h < 0.3 ? 'shopN' : h < 0.45 ? 'teashopN' : 'townhouseN';
+              putB(typ, bx, bz, face, 1, typ === 'shopN' ? 3.4 : typ === 'teashopN' ? 2.6 : 4.6);
             } else {
-              const typ = h < 0.55 ? 'house' : 'townhouseA';
-              putB(typ, bx, bz, face, typ === 'house' ? 1 : 1.5, 2.4);
+              const typ = h < 0.55 ? 'houseN' : 'townhouseN';
+              putB(typ, bx, bz, face,
+                typ === 'houseN' ? houseVar(bx, bz) : thVar(bx, bz),
+                typ === 'houseN' ? 4.3 : 4.6);
             }
           }
           // Sidewalk poles along the core/commercial main street.
           if (zone !== 'residential' && i % 1 === 0) {
             const lx = p.x + px * side * 8.6, lz = p.z + pz * side * 8.6;
-            if (spotOk(lx, lz, 0.7)) recFor(lx, lz, -22).items.push(it('pole', lx, lz, yawR, 1, 0.25, 0.25));
+            if (spotOk(lx, lz, 0.7)) recFor(lx, lz, -22).items.push(it('poleN', lx, lz, yawR, 1, 0.3, 0.3));
           }
         }
 
@@ -368,12 +410,13 @@ export class NepalRoadside {
               if (sg >= 2) {
                 const hh = H(i * 67 + sg * 11 + side + 2, p.z);
                 if (hh < 0.62 * cfg.dense) {
-                  const bx = sx2 + dx * 8.6, bz = sz2 + dz * 8.6;
-                  const typ = zone === 'core' ? (hh < 0.4 ? 'cityB' : 'shop')
-                    : hh < 0.5 ? 'house' : 'townhouseB';
+                  const bx = sx2 + dx * 11, bz = sz2 + dz * 11;
+                  const typ = zone === 'core' ? (hh < 0.4 ? 'cityBN' : 'shopN')
+                    : hh < 0.5 ? 'houseN' : 'townhouseN';
                   putB(typ, bx, bz, yawR + Math.PI,
-                    typ === 'cityB' ? cfg.towerS * 0.85 : typ === 'shop' ? 1.5
-                    : typ === 'house' ? 1 : 1.5, 2.3);
+                    typ === 'cityBN' ? cfg.towerS * 0.85 : 1,
+                    typ === 'cityBN' ? 6.8 : typ === 'shopN' ? 3.4
+                    : typ === 'houseN' ? 4.3 : 4.6);
                 }
               }
             }
@@ -396,15 +439,15 @@ export class NepalRoadside {
         const x = p.x + -dz * off, z = p.z + dx * off;
         return putB(typ, x, z, Math.atan2(dx, dz) + (off > 0 ? -Math.PI / 2 : Math.PI / 2), sc, collR);
       };
-      slot('school', 260, 28, 1.8, 3.8) || slot('school', -260, -28, 1.8, 3.8);
-      slot('clinic', -230, 26, 1.5, 2.4);
-      slot('clinic', 370, -24, 1.5, 2.4);
-      slot('fuel', -310, 13, 1.2, 1.6);
-      slot('busstop', 65, 9.3, 1.1, 0);
-      slot('busstop', -65, -9.3, 1.1, 0);
+      slot('schoolN', 260, 32, 1, 7.5) || slot('schoolN', -260, -32, 1, 7.5);
+      slot('clinicN', -230, 28, 1, 4.6);
+      slot('clinicN', 370, -28, 1, 4.6);
+      slot('fuelN', -310, 17, 1, 2.0);
+      slot('busstopN', 65, 10.5, 1, 0.5);
+      slot('busstopN', -65, -10.5, 1, 0.5);
       // Bus terminal: parking row + double stop.
       for (let k = 0; k < 3; k++) slot('parklot', -150 - k * 14, 27, 1.4, 0);
-      slot('busstop', -150, 17, 1.1, 0);
+      slot('busstopN', -150, 19, 1, 0.5);
       // Park: green square with trees, walls and a flag.
       for (let k = 0; k < 6; k++) {
         slot('tree', 150 + (k % 3) * 12, -30 - Math.floor(k / 3) * 11, 1.3, 0.5);
@@ -422,8 +465,8 @@ export class NepalRoadside {
         slot('parklot', 12, 44, 1.3, 0);
       } else if (cfg.landmark === 'lakeside') {
         for (let k = 0; k < 4; k++) {
-          slot('teashop', -70 - k * 22, 10.5, 1.4, 2.2);
-          slot('stall', -80 - k * 22, 10.2, 1.2, 1.1);
+          slot('teashopN', -70 - k * 24, 12, 1, 2.6);
+          slot('stall', -82 - k * 24, 11, 1.2, 1.1);
         }
         slot('pagoda', 20, 32, 1.6, 3.2);
         slot('flagpole', -60, 14, 1.2, 0.3);
@@ -432,7 +475,7 @@ export class NepalRoadside {
           slot('stall', 115 + (k % 3) * 9, 22 + Math.floor(k / 3) * 8, 1.25, 1.1) ||
             slot('stall', -115 - (k % 3) * 9, -(22 + Math.floor(k / 3) * 8), 1.25, 1.1);
         }
-        slot('shop', 100, 20, 1.5, 2.4) || slot('shop', -100, -20, 1.5, 2.4);
+        slot('shopN', 100, 22, 1, 3.4) || slot('shopN', -100, -22, 1, 3.4);
       } else if (cfg.landmark === 'stupa') {
         slot('stupa', 0, 36, 2.2, 2.0) || slot('stupa', 40, -36, 2.2, 2.0);
         slot('flagpole', 10, 32, 1.3, 0.3);
@@ -488,11 +531,11 @@ export class NepalRoadside {
           CITY_CFG[city.id] || CITY_CFG.bharatpur);
         // Residential outskirt strips beyond the core (rural transition).
         buildSettlement(best, Math.max(2, bi - 10), 'anchor-outskirt', {
-          spanNodes: 3, sp: 15, rows: 1, density: 0.5, maxH: 10, minH: 3,
+          spanNodes: 3, sp: 19, rows: 1, density: 0.5, maxH: 10, minH: 3,
           plainHouse: 0.7, services: [],
         });
         buildSettlement(best, Math.min(best.pts.length - 5, bi + 7), 'anchor-outskirt', {
-          spanNodes: 3, sp: 15, rows: 1, density: 0.5, maxH: 10, minH: 3,
+          spanNodes: 3, sp: 19, rows: 1, density: 0.5, maxH: 10, minH: 3,
           plainHouse: 0.7, services: [],
         });
       }
@@ -509,10 +552,10 @@ export class NepalRoadside {
         gen.sampleInfo(p.x, p.z, info);
         if (info.dry > 0.6 || info.wRk + info.wMnt > 0.6) continue;
         buildSettlement(route, i, 'town', {
-          spanNodes: 4, sp: 15, rows: 2, density: 0.7,
+          spanNodes: 4, sp: 19, rows: 2, density: 0.7,
           maxH: 20 + ((hash01(i, 3, SALT + 59) * 20) | 0), minH: 9,
           plainHouse: 0.5,
-          services: ['shop', 'teashop', 'school', 'clinic', 'fuel', 'busstop', 'stall'],
+          services: ['shopN', 'teashopN', 'schoolN', 'clinicN', 'fuelN', 'busstopN', 'stall'],
         });
       }
     }
@@ -527,10 +570,10 @@ export class NepalRoadside {
         const dry = info.dry > 0.6;
         if (dry && hash01(i, 11, SALT + 67) > 0.4) continue; // Mustang: rare
         buildSettlement(route, i, 'village', {
-          spanNodes: 2, sp: dry ? 9 : 13, rows: 1, density: dry ? 0.8 : 0.65,
+          spanNodes: 2, sp: dry ? 11 : 17, rows: 1, density: dry ? 0.8 : 0.65,
           maxH: dry ? 8 : 8 + ((hash01(i, 5, SALT + 71) * 8) | 0), minH: 4,
           plainHouse: 1,
-          services: dry ? ['stupa', 'wall'] : ['teashop', 'stall', 'stupa'],
+          services: dry ? ['stupa', 'wall'] : ['teashopN', 'stall', 'stupa'],
         });
       }
     }
@@ -571,11 +614,11 @@ export class NepalRoadside {
         const inChitwan = eW2(macro._eChitwan, u, v);
         const terai = v < 0.155 && info.h < 20;
         let pat;
-        if (dry) pat = { n: 3 + (hGate * 7 | 0) % 2, sp: 7, row: false, clearR: 12, prob: 0.65, scale: 0.95 };
-        else if (inValley) pat = { n: 5 + (hGate * 11 | 0) % 3, sp: 10, row: true, clearR: 14, prob: 0.75, scale: 1.05 };
-        else if (inChitwan) pat = { n: 2 + (hGate * 9 | 0) % 2, sp: 13, row: false, clearR: 7, prob: 0.45, scale: 1 };
-        else if (terai) pat = { n: 3 + (hGate * 13 | 0) % 3, sp: 17, row: false, clearR: 15, prob: 0.6, scale: 1.1 };
-        else pat = { n: 4 + (hGate * 17 | 0) % 3, sp: 9.5, row: false, clearR: 13, prob: 0.5, scale: 1 };
+        if (dry) pat = { n: 3 + (hGate * 7 | 0) % 2, sp: 10, row: false, clearR: 16, prob: 0.65, scale: 0.7 }; // small stone/earth houses
+        else if (inValley) pat = { n: 5 + (hGate * 11 | 0) % 3, sp: 14, row: true, clearR: 18, prob: 0.75, scale: 1.0 };
+        else if (inChitwan) pat = { n: 2 + (hGate * 9 | 0) % 2, sp: 20, row: false, clearR: 10, prob: 0.45, scale: 1 };
+        else if (terai) pat = { n: 3 + (hGate * 13 | 0) % 3, sp: 26, row: false, clearR: 20, prob: 0.6, scale: 1.1 }; // wide Terai properties
+        else pat = { n: 4 + (hGate * 17 | 0) % 3, sp: 15, row: false, clearR: 18, prob: 0.5, scale: 0.95 }; // compact hill clusters
         // W-3H: hamlets keep clear of villages/towns/anchors, but thicken
         // in the 260-700 m outskirt belt (gradual rural -> urban feel).
         let distS = 1e9;
@@ -587,7 +630,7 @@ export class NepalRoadside {
         const prob = pat.prob * (distS < 700 ? 1.5 : 1);
         if (hash01(i, Math.round(p.z * 0.01), SALT + 13) > prob) continue;
 
-        const cOff = route.w + 11 + hash01(i, 5, SALT + 17) * 8;
+        const cOff = route.w + 15 + hash01(i, 5, SALT + 17) * 8;
         const cx = p.x + px * side * cOff, cz = p.z + pz * side * cOff;
         if (water.submerged(cx, cz, gen.height(cx, cz))) continue;
         if (!slopeOk(cx, cz, 0.9)) continue;
@@ -597,8 +640,8 @@ export class NepalRoadside {
         for (let k = 0; k < pat.n; k++) {
           let hx, hz;
           if (pat.row) { // valley roadside neighborhood: houses in a row
-            hx = p.x + dx * (k - (pat.n - 1) / 2) * pat.sp + px * side * (route.w + 8.5);
-            hz = p.z + dz * (k - (pat.n - 1) / 2) * pat.sp + pz * side * (route.w + 8.5);
+            hx = p.x + dx * (k - (pat.n - 1) / 2) * pat.sp + px * side * (route.w + 13.5);
+            hz = p.z + dz * (k - (pat.n - 1) / 2) * pat.sp + pz * side * (route.w + 13.5);
           } else {      // cluster: ring + jitter around the center
             const a = hash01(i * 5 + k, 1, SALT + 19) * Math.PI * 2;
             const rr = pat.sp * (0.55 + hash01(i * 5 + k, 2, SALT + 23) * 0.8);
@@ -615,7 +658,10 @@ export class NepalRoadside {
           // Face the road.
           const yawFace = Math.atan2(p.x + dx * ((hx - p.x) * dx + (hz - p.z) * dz) - hx,
                                      p.z + dz * ((hx - p.x) * dx + (hz - p.z) * dz) - hz);
-          rec.items.push(it('house', hx, hz, yawFace, pat.scale, 2.4, 0.2));
+          const sHV = pat.scale * houseVar(hx, hz);
+          if (!bClear(hx, hz, 4.3 * sHV)) continue;
+          bAdd(hx, hz, 4.3 * sHV);
+          rec.items.push(it('houseN', hx, hz, yawFace, sHV, 4.3, 0.28));
           placed++;
         }
         if (placed === 0) { rec.items.length = 0; rec.r = -22; continue; }
@@ -640,9 +686,9 @@ export class NepalRoadside {
       for (let k = 0; k < nDeck; k++) {
         const u = (k - (nDeck - 1) / 2) * 12;
         const x = b.x + b.dx * u, z = b.z + b.dz * u;
-        put(x, z, it('bridge', x, z, yawR, 1, 0, 0.12));
+        put(x, z, it('bridgeN', x, z, yawR, 1, 0, 0.12));
         for (const s of [-1, 1]) {
-          const fx = x + -b.dz * s * 3.0, fz = z + b.dx * s * 3.0;
+          const fx = x + -b.dz * s * 3.9, fz = z + b.dx * s * 3.9;
           put(fx, fz, it('fence', fx, fz, yawR - Math.PI / 2, 0.8, 0, 0.25));
         }
       }

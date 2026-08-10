@@ -42,7 +42,10 @@ export class WorldManager {
     this.towns = new Towns(this.generator, this.villages);
     this.cities = new Cities(this.generator, this.villages, this.towns);
     this.industry = new Industrial(this.generator, this.cities);
-    this.population = new Population(scene, this.generator, this.villages, this.towns, this.cities, this.industry);
+    // W-3K: the legacy-settlement NPC layer only runs in ?world=default
+    // (Nepal settlements get their own population in a later phase).
+    this.population = this.nepalMode ? null
+      : new Population(scene, this.generator, this.villages, this.towns, this.cities, this.industry);
     // Phase W-3D: rivers/lakes/streams water layer (nepal mode only).
     this.water = this.nepalMode ? new NepalWater(scene, this.generator.macro, this.generator) : null;
     // Phase W-3F: bridges + roadside infrastructure along the network.

@@ -240,8 +240,9 @@ export class Game {
       }
       // Stunt/off-road/trail challenges (Phase 3K-3).
       if (this.state === State.PLAYING) this.challenges.update(this.bike, frameDt);
-      // Village + town discoveries (Phase 3L-1/2).
-      if (this.state === State.PLAYING) {
+      // Village + town discoveries (Phase 3L-1/2) — legacy world only
+      // (W-3K: the Nepal world's settlements are the roadside hierarchy).
+      if (this.state === State.PLAYING && !this.world.nepalMode) {
         const v = this.world.villages.update(this.bike.position.x, this.bike.position.z, frameDt);
         if (v) {
           const res = this.achievements.discover(v.id, v.name);
@@ -264,7 +265,7 @@ export class Game {
           if (res && this.onDiscover) this.onDiscover({ ...res, type: iz.kind });
         }
         // Ambient NPCs + traffic (Phase 3N): pooled, no colliders, no physics.
-        this.world.population.update(this.bike.position.x, this.bike.position.z, frameDt);
+        if (this.world.population) this.world.population.update(this.bike.position.x, this.bike.position.z, frameDt);
       }
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(
