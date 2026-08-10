@@ -153,7 +153,8 @@ export class TerrainGenerator {
       b += (p[2] + 0.03 * j) * info.wFa;
     }
     if (info.wMnt > 0.001) {
-      const sn = sstep(13, 17, h + j * 3 - 1.5); // snow line with dithered edge
+      const so = info.snowOff || 0;
+      const sn = sstep(13 + so, 17 + so, h + j * 3 - 1.5); // snow line with dithered edge
       r += (0.40 + (0.93 - 0.40) * sn) * info.wMnt;
       g += (0.41 + (0.94 - 0.41) * sn) * info.wMnt;
       b += (0.46 + (0.97 - 0.46) * sn) * info.wMnt;
@@ -757,6 +758,12 @@ export class TerrainGenerator {
       info.mtnH = mtn ? mtn.H : 0;
       info.mtnKind = mtn && mtn.kind ? mtn.kind : 0;
       info.mtnRef = mtn || null;
+      // Phase W-3C: Nepal-mode biome shaping — vegetation/appearance only,
+      // heights untouched. Skipped for the internal height-only scratch.
+      if (this.macro && info !== this._info) {
+        info.snowOff = 0;
+        this.macro.shapeInfo(x, z, info);
+      }
     }
 
     if (withFeatures) h = this._features(x, z, h);
@@ -894,5 +901,6 @@ export function makeInfo() {
   return {
     h: 0, wH: 0, wF: 0, wFa: 0, wRk: 0, wMnt: 0, lo: 0,
     trail: 0, stream: 0, terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0, mtnKind: 0, mtnRef: null,
+    snowOff: 0,
   };
 }

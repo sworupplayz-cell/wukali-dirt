@@ -736,12 +736,12 @@ export const PROP_TYPES = [
   { name: 'stone', build: stone, max: 450 },
   { name: 'branch', build: branch, max: 160 },
   // Phase 3L-1 rural world.
-  { name: 'corn', build: corn, max: 520, doubleSided: true },
+  { name: 'corn', build: corn, max: 560, doubleSided: true },
   { name: 'mill', build: waterMill, max: 10 },
   // Phase 3L-1F crop rows (one instance = one planted row strip).
-  { name: 'rice', build: rice, max: 420, doubleSided: true },
-  { name: 'wheat', build: wheat, max: 420 },
-  { name: 'mustard', build: mustard, max: 320 },
+  { name: 'rice', build: rice, max: 520, doubleSided: true },
+  { name: 'wheat', build: wheat, max: 520 },
+  { name: 'mustard', build: mustard, max: 400 },
   { name: 'potato', build: potato, max: 300 },
   { name: 'veg', build: veg, max: 260 },
   { name: 'tea', build: tea, max: 380 },

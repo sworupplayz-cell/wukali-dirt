@@ -362,15 +362,24 @@ export class ChunkManager {
     {
       const FIELD = 40;
       let cropCount = 0;
+      // Nepal mode: Terai grows LARGER contiguous fields (fuller 40 m cells).
+      const cropCap = this.gen.macro ? 24 : 18;
       const f0x = Math.floor((ox - FIELD) / FIELD), f1x = Math.floor((ox + CHUNK_SIZE + FIELD) / FIELD);
       const f0z = Math.floor((oz - FIELD) / FIELD), f1z = Math.floor((oz + CHUNK_SIZE + FIELD) / FIELD);
-      for (let fx = f0x; fx <= f1x && cropCount < 18; fx++) {
-        for (let fz = f0z; fz <= f1z && cropCount < 18; fz++) {
+      for (let fx = f0x; fx <= f1x && cropCount < cropCap; fx++) {
+        for (let fz = f0z; fz <= f1z && cropCount < cropCap; fz++) {
           const crop = this._cropField(fx, fz);
           if (!crop) continue;
           const cxc = (fx + 0.5) * FIELD, czc = (fz + 0.5) * FIELD;
           const dirI = Math.floor(hash01(fx, fz, this.gen.seed * 47 + 5) * 4);
-          const a = dirI * (Math.PI / 4);
+          let a = dirI * (Math.PI / 4);
+          // Nepal mode (W-3C): rows follow the CONTOUR of the macro slope —
+          // terraced hillsides read as real Nepali farm country.
+          if (this.gen.macro) {
+            const gx = this.gen.height(cxc + 6, czc) - this.gen.height(cxc - 6, czc);
+            const gz = this.gen.height(cxc, czc + 6) - this.gen.height(cxc, czc - 6);
+            if (gx * gx + gz * gz > 0.2) a = Math.atan2(gx, -gz) + Math.PI / 2;
+          }
           const rdx = Math.cos(a), rdz = Math.sin(a);        // along the row
           const pdx = -rdz, pdz = rdx;                       // across rows
           if (crop === 'banana') {
@@ -387,11 +396,18 @@ export class ChunkManager {
             continue;
           }
           const rows = 4, segs = 3;
+          // Terai plains (macro height < 18 m) plant fuller, larger fields.
+          let rowsN = rows, segsN = segs;
+          if (this.gen.macro && (crop === 'rice' || crop === 'wheat' ||
+              crop === 'mustard' || crop === 'corn')) {
+            this.gen.sampleInfo(cxc, czc, info);
+            if (info.h < 18) { rowsN = 5; segsN = 4; }
+          }
           const rowGap = crop === 'tea' ? 3.4 : 2.9;
-          for (let rI = 0; rI < rows; rI++) {
-            for (let sI = 0; sI < segs; sI++) {
-              const off = (rI - (rows - 1) / 2) * rowGap;
-              const along = (sI - (segs - 1) / 2) * 6.1;
+          for (let rI = 0; rI < rowsN; rI++) {
+            for (let sI = 0; sI < segsN; sI++) {
+              const off = (rI - (rowsN - 1) / 2) * rowGap;
+              const along = (sI - (segsN - 1) / 2) * 6.1;
               const x = cxc + rdx * along + pdx * off;
               const z = czc + rdz * along + pdz * off;
               if (x < ox || x >= ox + CHUNK_SIZE || z < oz || z >= oz + CHUNK_SIZE) continue;
@@ -413,8 +429,8 @@ export class ChunkManager {
           }
           // Paddies get a simple irrigation channel along the field edge.
           if (crop === 'rice') {
-            const chx = cxc + pdx * ((rows + 0.6) / 2) * rowGap;
-            const chz = czc + pdz * ((rows + 0.6) / 2) * rowGap;
+            const chx = cxc + pdx * ((rowsN + 0.6) / 2) * rowGap;
+            const chz = czc + pdz * ((rowsN + 0.6) / 2) * rowGap;
             if (chx >= ox && chx < ox + CHUNK_SIZE && chz >= oz && chz < oz + CHUNK_SIZE &&
                 this._cropSpotOk(chx, chz, info, 0.6)) {
               c.props.push({ t: PROP.channel, x: chx, y: this.gen.height(chx, chz) - 0.04, z: chz,
@@ -502,6 +518,30 @@ export class ChunkManager {
       }
       if (t < 0) continue;
 
+      // Nepal rain shadow (W-3C): green trees don't grow in Mustang/Dolpo
+      // country — most tree rolls vanish, the rest become dry scrub.
+      if (this.gen.macro && (t === PROP.tree || t === PROP.pine) && info.dry > 0.65) {
+        const hd = hash01(Math.round(x * 3), Math.round(z * 3), this.gen.seed * 31 + 55);
+        if (hd < 0.72) continue;
+        t = PROP.bush; s *= 0.55; collR = 0;
+      }
+
+      // Phase W-3C tree scale classes: small / medium / large / tall forest
+      // giants. Scale comes from a POSITION hash (zero extra rng draws), so
+      // every legacy placement stays bit-identical — only sizes enrich.
+      if (t === PROP.pine || t === PROP.tree) {
+        const hc = hash01(Math.round(x * 5), Math.round(z * 5), this.gen.seed * 29 + 77);
+        const forest = Math.min(1, info.wF * 1.3 + (info.mtn > 0.04 ? 0.5 : 0));
+        let cls = hc < 0.30 ? 0.85 : hc < 0.70 ? 1.05 : hc < 0.92 ? 1.35
+          : 1.6 + 0.5 * forest; // tall class: real giants in deep forest
+        // Nepal mode: alpine/rain-shadow stunting toward the high belts.
+        if (this.gen.macro) cls *= 1 - 0.3 * Math.min(1, info.wMnt + 0.5 * info.wRk);
+        s *= cls;
+        collR = 0.5 * Math.min(s, 1.6); // canopy outgrows the trunk
+      } else if (t === PROP.bush && this.gen.macro) {
+        s *= 1 + 0.4 * Math.min(1, info.wF); // thick understory (Chitwan)
+      }
+
       // Sink props deeper on slopes so their downhill edge never floats.
       if (t === PROP.rock) sink += (1 - ny) * 1.3 * s;
       else if (t === PROP.pine || t === PROP.tree) sink += (1 - ny) * 0.8 * s;
@@ -522,15 +562,28 @@ export class ChunkManager {
    * on cooler high ground, corn through the village farm belt.
    */
   _cropField(fx, fz) {
-    if (hash01(fx, fz, this.gen.seed * 53 + 17) > 0.55) return null;
+    const gate = hash01(fx, fz, this.gen.seed * 53 + 17);
+    const macro = this.gen.macro;
+    if (!macro && gate > 0.55) return null;
     const info = this._info;
     const x = (fx + 0.5) * 40, z = (fz + 0.5) * 40;
     this.gen.sampleInfo(x, z, info);
     if (info.mtn > 0.02 || info.trail > 0.45 || info.stream > 0.55) return null;
-    const h = info.h;
+    // Nepal mode (W-3C): agriculture reads height RELATIVE to the macro
+    // surface — the same local micro-relief these windows were tuned on.
+    const h = macro ? macro.relHeight(x, z, info.h) : info.h;
     const ny = this._normalY(x, z);
     if (ny < 0.87) return null;
     const pick = hash01(fz, fx, this.gen.seed * 59 + 23);
+    if (macro) {
+      // Terai plains are field country: fields pack far denser there.
+      if (gate > (info.h < 18 && info.dry < 0.5 ? 0.8 : 0.55)) return null;
+      // Alpine rock carries no agriculture at all.
+      if (info.wRk + info.wMnt > 0.7) return null;
+      // Rain-shadow country (Mustang/Manang/Dolpo): dry-tolerant potato
+      // plots only, and rarely — never paddy rice on a desert mesa.
+      if (info.dry > 0.65) return pick < 0.25 ? 'potato' : null;
+    }
     if (info.terr > 0.3 && h < 9 && info.lo > 0.6) return 'rice';
     if (h < 5 && info.lo > 0.8 && info.wFa > 0.3 && pick < 0.4) return 'banana';
     if (this.villages) {
@@ -541,7 +594,8 @@ export class ChunkManager {
     // Elevation windows match THIS world's lowland relief (roughly -5..+15 m
     // off the mountain domes): tea takes the upper hillsides, potatoes the
     // coolest high ground.
-    if (info.wH > 0.5 && h >= 6 && ny > 0.9 && pick < 0.6) return 'tea';
+    if (info.wH > (macro ? 0.45 : 0.5) && (macro ? info.h >= 25 : h >= 6) &&
+        ny > 0.9 && pick < 0.6) return 'tea'; // hill crop: never on the plains
     if (h >= 9 && info.wH + info.wRk > 0.55) return 'potato';
     if (info.wFa + info.wH > 0.55 && h >= 4 && h <= 26) return 'corn';
     return null;

@@ -77,6 +77,18 @@ export class NepalMacro {
       floor: (r.band[0] + r.band[1]) * 0.5,
     }));
     this._scratch = { h: 0, mul: 1 };
+    this._scratch2 = { h: 0, mul: 1 };
+    // Region ellipses for biome shaping (W-3C), from the blueprint.
+    const ell = (id) => {
+      const r = REGIONS.find((q) => q.id === id);
+      return { cu: r.center[0], cv: r.center[1], ru: r.extent[0], rv: r.extent[1] };
+    };
+    this._eChitwan = ell('chitwan');
+    this._eIlam = ell('ilam');
+    this._eMustang = ell('mustang');
+    this._eManang = ell('manang');
+    this._eDolpo = ell('dolpo');
+    this._eRara = ell('rara');
   }
 
   /** Belt spline base height at v (with optional index 1..4 for the other
@@ -98,6 +110,97 @@ export class NepalMacro {
   apply(x, z, proceduralH) {
     const m = this._macro(x, z, this._scratch);
     return m.h + proceduralH * m.mul;
+  }
+
+  /** Height RELATIVE to the macro surface — the local micro-relief the
+   *  legacy agriculture rules were calibrated against (W-3C). */
+  relHeight(x, z, h) {
+    return h - this._macro(x, z, this._scratch2).h;
+  }
+
+  /**
+   * Biome shaping (W-3C): reshape the procedural surface weights so ground
+   * cover, trees, crops, colors and even tyre grip follow Nepal's regions.
+   * NEVER touches heights — vegetation/appearance only. Weight mass is
+   * re-normalized so overall prop density stays in the engine's budget.
+   */
+  shapeInfo(x, z, info) {
+    let u = x / WORLD_SIZE + 0.5, v = 0.5 - z / WORLD_SIZE;
+    if (u < 0) u = 0; else if (u > 1) u = 1;
+    if (v < 0) v = 0; else if (v > 1) v = 1;
+    info.snowOff = 285; // gameplay snowline ~300 m (trans mesas stay bare)
+
+    const sum0 = info.wH + info.wF + info.wFa + info.wRk + info.wMnt;
+    if (sum0 < 0.001) return;
+    const eW = (e) => {
+      const du = (u - e.cu) / e.ru, dv = (v - e.cv) / e.rv;
+      return sstep(1.35, 0.75, du * du + dv * dv);
+    };
+    const terai = 1 - sstep(0.12, 0.165, v);
+    const chure = sstep(0.13, 0.165, v) * (1 - sstep(0.21, 0.25, v));
+    const highBelt = sstep(0.58, 0.66, v) * (1 - sstep(0.79, 0.84, v));
+    const trans = sstep(0.79, 0.85, v);
+    const chitwan = eW(this._eChitwan);
+    const ilam = eW(this._eIlam);
+    const dryZone = Math.min(1, Math.max(trans, eW(this._eMustang), eW(this._eManang),
+      eW(this._eDolpo) * 0.9));
+    const alpine = Math.min(1, Math.max(highBelt, eW(this._eRara) * 0.7,
+      eW(this._eDolpo) * 0.6));
+
+    let wH = info.wH, wF = info.wF, wFa = info.wFa, wRk = info.wRk, wMnt = info.wMnt;
+    // Terai: broad warm farmland, scattered trees, no rock outcrops; any
+    // procedural massif that strays into the plain reads as green hills,
+    // never as snow biome.
+    if (terai > 0) {
+      wFa += (wFa + wH) * 1.1 * terai;
+      wF *= 1 - 0.35 * terai;
+      wRk *= 1 - 0.9 * terai;
+      wH += wMnt * 0.85 * terai;
+      wMnt *= 1 - 0.85 * terai;
+    }
+    // Chure: scrubby mixed transition (drier ground tint).
+    if (chure > 0) {
+      wF *= 1 + 0.35 * chure;
+      info.dry = Math.min(1, info.dry + 0.3 * chure);
+    }
+    // Chitwan: dense subtropical forest swallows farms and rock.
+    if (chitwan > 0) {
+      wF += (Math.max(wF, info.lo * 0.85) - wF) * chitwan;
+      wFa *= 1 - 0.7 * chitwan;
+      wRk *= 1 - 0.8 * chitwan;
+    }
+    // Ilam: lush green tea hills (wH is the tea trigger downstream).
+    if (ilam > 0) {
+      wH += (Math.max(wH, info.lo * 0.75) - wH) * ilam;
+      wF *= 1 + 0.4 * ilam;
+      info.dry *= 1 - ilam;
+    }
+    // High-mountain belt + Rara/Dolpo highlands: alpine fade to rock.
+    if (alpine > 0) {
+      const move = 0.75 * alpine;
+      const lost = (wH + wF + wFa) * move;
+      wH *= 1 - move; wF *= 1 - 0.9 * move; wFa *= 1 - move;
+      wRk += lost * 0.45; wMnt += lost * 0.55;
+    }
+    // Trans-Himalayan rain shadow: barren slopes, sparse dry grass — the
+    // vegetation mass genuinely MOVES to exposed rock (not renormalized back).
+    if (dryZone > 0) {
+      const lost = (wF * 0.88 + wFa * 0.92 + wH * 0.55) * dryZone;
+      wF *= 1 - 0.88 * dryZone;
+      wFa *= 1 - 0.92 * dryZone;
+      wH *= 1 - 0.55 * dryZone;
+      wRk += lost * 0.85; wMnt += lost * 0.15;
+      info.dry = Math.max(info.dry, dryZone * 0.9);
+    }
+    // Preserve total weight mass (keeps scatter density budgeted).
+    const sum1 = wH + wF + wFa + wRk + wMnt;
+    if (sum1 > 0.001) {
+      const k = sum0 / sum1;
+      // Rock/alpine zones deliberately keep a little extra exposure.
+      const kk = k + (1 - k) * 0.25 * Math.max(alpine, dryZone);
+      info.wH = wH * kk; info.wF = wF * kk; info.wFa = wFa * kk;
+      info.wRk = wRk * kk; info.wMnt = wMnt * kk;
+    }
   }
 
   _macro(x, z, out) {
