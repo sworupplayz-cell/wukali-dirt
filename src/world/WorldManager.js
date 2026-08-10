@@ -7,6 +7,7 @@ import { MountainImpostors } from './MountainImpostors.js';
 import { Villages } from './Villages.js';
 import { Towns } from './Towns.js';
 import { Cities } from './Cities.js';
+import { Industrial } from './Industrial.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -25,7 +26,8 @@ export class WorldManager {
     this.villages = new Villages(this.generator);
     this.towns = new Towns(this.generator, this.villages);
     this.cities = new Cities(this.generator, this.villages, this.towns);
-    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns, this.cities);
+    this.industry = new Industrial(this.generator, this.cities);
+    this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns, this.cities, this.industry);
     this.mountains = new Mountains(scene, seed);
     this.impostors = new MountainImpostors(scene, this.generator);
     this._n = new THREE.Vector3();

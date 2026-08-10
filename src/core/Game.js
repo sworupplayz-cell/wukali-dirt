@@ -255,6 +255,12 @@ export class Game {
           const res = this.achievements.discover(cy.id, cy.name);
           if (res && this.onDiscover) this.onDiscover({ ...res, type: 'city' });
         }
+        // Industrial zones + large stadiums (Phase 3L-4).
+        const iz = this.world.industry.update(this.bike.position.x, this.bike.position.z, frameDt);
+        if (iz) {
+          const res = this.achievements.discover(iz.id, iz.name);
+          if (res && this.onDiscover) this.onDiscover({ ...res, type: iz.kind });
+        }
       }
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(

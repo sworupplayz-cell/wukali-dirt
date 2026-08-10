@@ -568,6 +568,156 @@ function parkingLot() {
   return merge(parts);
 }
 
+// ---- Phase 3L-4: industrial areas -----------------------------------------
+
+function factory() {
+  // Factory hall: big shed, sawtooth roofline with skylight panels, brick
+  // smokestack, wide dark gate, sign band.
+  const parts = [
+    colorize(new THREE.BoxGeometry(9, 4.2, 6.6), 0.62, 0.63, 0.66).translate(0, 2.1, 0),
+    colorize(new THREE.BoxGeometry(2.8, 3.0, 0.15), 0.07, 0.07, 0.08).translate(-1.6, 1.5, 3.32),
+    colorize(new THREE.BoxGeometry(3.6, 0.7, 0.12), 0.85, 0.45, 0.15).translate(1.8, 3.6, 3.33),
+    colorize(new THREE.CylinderGeometry(0.42, 0.58, 6.4, 6), 0.56, 0.30, 0.24).translate(3.2, 6.0, -2.2),
+  ];
+  for (let i = 0; i < 3; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(3.05, 0.16, 6.8), 0.5, 0.52, 0.55)
+      .rotateZ(0.42).translate(-2.9 + i * 2.95, 4.85, 0));
+    parts.push(colorize(new THREE.BoxGeometry(0.14, 1.15, 6.5), 0.25, 0.4, 0.55)
+      .translate(-1.65 + i * 2.95, 4.68, 0));
+  }
+  return merge(parts);
+}
+function warehouse() {
+  // Godam: long corrugated shed, two loading-bay doors + concrete dock.
+  const parts = [
+    colorize(new THREE.BoxGeometry(12, 3.4, 6), 0.68, 0.64, 0.55).translate(0, 1.7, 0),
+    colorize(new THREE.BoxGeometry(2.4, 2.2, 0.14), 0.10, 0.10, 0.12).translate(-3.0, 1.75, 3.02),
+    colorize(new THREE.BoxGeometry(2.4, 2.2, 0.14), 0.10, 0.10, 0.12).translate(3.0, 1.75, 3.02),
+    colorize(new THREE.BoxGeometry(9.5, 0.85, 1.7), 0.58, 0.57, 0.54).translate(0, 0.42, 3.85),
+    colorize(new THREE.BoxGeometry(2.6, 0.4, 1.6), 0.52, 0.51, 0.48).rotateX(-0.24).translate(0, 0.18, 5.2),
+    colorize(new THREE.BoxGeometry(3.4, 0.55, 0.1), 0.2, 0.35, 0.6).translate(0, 3.05, 3.03),
+  ];
+  for (const rp of corrRoof(12.6, 6.6, 0.46, 0.48, 0.52)) parts.push(rp.rotateZ(0.05).translate(0, 3.55, 0));
+  return merge(parts);
+}
+function truck() {
+  // Parked lorry (Tata-style): bright cab, painted cargo bed, six wheels.
+  const parts = [
+    colorize(new THREE.BoxGeometry(5.6, 0.3, 1.7), 0.16, 0.16, 0.18).translate(0, 0.62, 0),
+    colorize(new THREE.BoxGeometry(1.6, 1.6, 1.8), 0.78, 0.28, 0.16).translate(2.0, 1.55, 0),
+    colorize(new THREE.BoxGeometry(0.14, 0.7, 1.5), 0.18, 0.24, 0.3).translate(2.62, 1.9, 0),
+    colorize(new THREE.BoxGeometry(3.6, 1.7, 1.85), 0.24, 0.5, 0.32).translate(-0.9, 1.65, 0),
+    colorize(new THREE.BoxGeometry(3.6, 0.35, 1.9), 0.72, 0.62, 0.3).translate(-0.9, 2.6, 0),
+  ];
+  for (const wx of [2.0, -0.1, -1.9]) {
+    for (const wz of [-0.85, 0.85]) {
+      parts.push(colorize(new THREE.CylinderGeometry(0.44, 0.44, 0.3, 7), 0.1, 0.1, 0.11)
+        .rotateX(Math.PI / 2).translate(wx, 0.44, wz));
+    }
+  }
+  return merge(parts);
+}
+function container() {
+  // Shipping/storage container with door ribs.
+  const parts = [
+    colorize(new THREE.BoxGeometry(6, 2.55, 2.4), 0.70, 0.30, 0.20).translate(0, 1.3, 0),
+    colorize(new THREE.BoxGeometry(0.12, 2.35, 2.2), 0.45, 0.19, 0.13).translate(3.02, 1.3, 0),
+    colorize(new THREE.BoxGeometry(6.1, 0.14, 0.14), 0.5, 0.22, 0.15).translate(0, 2.6, 1.15),
+    colorize(new THREE.BoxGeometry(6.1, 0.14, 0.14), 0.5, 0.22, 0.15).translate(0, 2.6, -1.15),
+  ];
+  for (let i = 0; i < 4; i++) {
+    parts.push(colorize(new THREE.BoxGeometry(1.15, 2.3, 0.08), 0.62, 0.26, 0.17)
+      .translate(-2.2 + i * 1.45, 1.3, 1.22));
+  }
+  return merge(parts);
+}
+function silo() {
+  // Storage silo / fuel tank: steel cylinder, cone cap, ladder strip.
+  return merge([
+    colorize(new THREE.CylinderGeometry(1.25, 1.25, 4.4, 8), 0.76, 0.77, 0.80).translate(0, 2.5, 0),
+    colorize(new THREE.ConeGeometry(1.3, 1.0, 8), 0.60, 0.62, 0.66).translate(0, 5.2, 0),
+    colorize(new THREE.BoxGeometry(0.3, 4.4, 0.1), 0.4, 0.42, 0.45).translate(0, 2.4, 1.24),
+    colorize(new THREE.BoxGeometry(1.9, 0.3, 1.9), 0.5, 0.5, 0.48).translate(0, 0.2, 0),
+  ]);
+}
+function pylon() {
+  // Transmission tower: tapered 4-sided lattice silhouette + two crossarms.
+  return merge([
+    colorize(new THREE.CylinderGeometry(0.16, 0.62, 11, 4), 0.55, 0.57, 0.60).translate(0, 5.5, 0),
+    colorize(new THREE.BoxGeometry(4.2, 0.16, 0.16), 0.5, 0.52, 0.55).translate(0, 8.5, 0),
+    colorize(new THREE.BoxGeometry(3.0, 0.16, 0.16), 0.5, 0.52, 0.55).translate(0, 10.0, 0),
+    colorize(new THREE.BoxGeometry(0.1, 0.5, 0.1), 0.75, 0.77, 0.8).translate(-1.9, 8.2, 0),
+    colorize(new THREE.BoxGeometry(0.1, 0.5, 0.1), 0.75, 0.77, 0.8).translate(1.9, 8.2, 0),
+    colorize(new THREE.BoxGeometry(0.1, 0.5, 0.1), 0.75, 0.77, 0.8).translate(-1.3, 9.7, 0),
+    colorize(new THREE.BoxGeometry(0.1, 0.5, 0.1), 0.75, 0.77, 0.8).translate(1.3, 9.7, 0),
+  ]);
+}
+function fence() {
+  // Compound fence panel: 8 m of grey mesh between three posts.
+  return merge([
+    colorize(new THREE.BoxGeometry(8, 1.55, 0.05), 0.47, 0.50, 0.53).translate(0, 1.05, 0),
+    colorize(new THREE.BoxGeometry(8.1, 0.12, 0.07), 0.36, 0.38, 0.4).translate(0, 1.85, 0),
+    colorize(new THREE.BoxGeometry(0.12, 2.0, 0.12), 0.34, 0.36, 0.38).translate(-3.95, 1.0, 0),
+    colorize(new THREE.BoxGeometry(0.12, 2.0, 0.12), 0.34, 0.36, 0.38).translate(0, 1.0, 0),
+    colorize(new THREE.BoxGeometry(0.12, 2.0, 0.12), 0.34, 0.36, 0.38).translate(3.95, 1.0, 0),
+  ]);
+}
+function crane() {
+  // Construction tower crane: mast, jib, counterweight, hanging hook.
+  return merge([
+    colorize(new THREE.BoxGeometry(0.55, 11.5, 0.55), 0.88, 0.68, 0.12).translate(0, 5.75, 0),
+    colorize(new THREE.BoxGeometry(8.6, 0.42, 0.42), 0.88, 0.68, 0.12).translate(2.6, 11.6, 0),
+    colorize(new THREE.BoxGeometry(0.5, 0.9, 0.9), 0.5, 0.5, 0.52).translate(-1.9, 11.3, 0),
+    colorize(new THREE.BoxGeometry(0.05, 3.4, 0.05), 0.15, 0.15, 0.16).translate(6.2, 9.9, 0),
+    colorize(new THREE.BoxGeometry(0.5, 0.4, 0.5), 0.45, 0.45, 0.48).translate(6.2, 8.0, 0),
+  ]);
+}
+function pile() {
+  // Sand/gravel heap at yards and construction sites.
+  const g = new THREE.IcosahedronGeometry(1, 0);
+  const rng = mulberry32(4242);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    p.setX(i, p.getX(i) * (1.35 + rng() * 0.3));
+    p.setY(i, Math.max(0.02, p.getY(i)) * 0.6);
+    p.setZ(i, p.getZ(i) * (1.15 + rng() * 0.3));
+  }
+  g.computeVertexNormals();
+  return colorize(g, 0.60, 0.53, 0.40).translate(0, 0.06, 0);
+}
+function conFrame() {
+  // Building under construction: concrete column-and-slab frame with rebar.
+  const parts = [
+    colorize(new THREE.BoxGeometry(7, 0.32, 5), 0.70, 0.70, 0.67).translate(0, 0.2, 0),
+    colorize(new THREE.BoxGeometry(7, 0.32, 5), 0.70, 0.70, 0.67).translate(0, 3.1, 0),
+    colorize(new THREE.BoxGeometry(7, 0.32, 5), 0.70, 0.70, 0.67).translate(0, 5.9, 0),
+  ];
+  for (const cx of [-3.1, 0, 3.1]) {
+    for (const cz of [-2.15, 2.15]) {
+      parts.push(colorize(new THREE.BoxGeometry(0.38, 5.8, 0.38), 0.60, 0.60, 0.58)
+        .translate(cx, 3.0, cz));
+      parts.push(colorize(new THREE.BoxGeometry(0.08, 1.0, 0.08), 0.45, 0.30, 0.22)
+        .translate(cx, 6.4, cz));
+    }
+  }
+  return merge(parts);
+}
+function bigStand() {
+  // Large stadium tier: five stepped rows, seat band, back wall, roof strip.
+  const parts = [];
+  for (let i = 0; i < 5; i++) {
+    const seat = i % 2 === 0;
+    parts.push(colorize(new THREE.BoxGeometry(16, 0.72, 1.35),
+      seat ? 0.26 : 0.72, seat ? 0.44 : 0.70, seat ? 0.72 : 0.66)
+      .translate(0, 0.36 + i * 0.72, -i * 1.25));
+  }
+  parts.push(colorize(new THREE.BoxGeometry(16, 1.3, 0.45), 0.66, 0.64, 0.60).translate(0, 4.1, -5.2));
+  parts.push(colorize(new THREE.BoxGeometry(16, 0.18, 3.2), 0.80, 0.30, 0.24).translate(0, 5.1, -4.0));
+  parts.push(colorize(new THREE.BoxGeometry(0.2, 1.6, 0.2), 0.5, 0.5, 0.52).translate(-7.4, 4.2, -3.0));
+  parts.push(colorize(new THREE.BoxGeometry(0.2, 1.6, 0.2), 0.5, 0.5, 0.52).translate(7.4, 4.2, -3.0));
+  return merge(parts);
+}
+
 export const PROP_TYPES = [
   { name: 'pine', build: pine, max: 800 },
   { name: 'tree', build: broadleaf, max: 420 },
@@ -616,7 +766,19 @@ export const PROP_TYPES = [
   { name: 'stand', build: standSegment, max: 16 },
   { name: 'roadseg', build: roadSegment, max: 130 },
   { name: 'roadsign', build: roadSign, max: 40 },
-  { name: 'parklot', build: parkingLot, max: 12 },
+  { name: 'parklot', build: parkingLot, max: 20 },
+  // Phase 3L-4 industrial areas + big stadiums.
+  { name: 'factory', build: factory, max: 10 },
+  { name: 'warehouse', build: warehouse, max: 14 },
+  { name: 'truck', build: truck, max: 24 },
+  { name: 'container', build: container, max: 30 },
+  { name: 'silo', build: silo, max: 14 },
+  { name: 'pylon', build: pylon, max: 10 },
+  { name: 'fence', build: fence, max: 90 },
+  { name: 'crane', build: crane, max: 6 },
+  { name: 'pile', build: pile, max: 20 },
+  { name: 'frame', build: conFrame, max: 6 },
+  { name: 'bigstand', build: bigStand, max: 26 },
 ];
 
 export const PROP = {};

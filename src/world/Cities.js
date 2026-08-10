@@ -23,6 +23,7 @@ import { makeInfo } from './TerrainGenerator.js';
  * consume these without relayout.
  */
 const CCELL = 3600;   // a city within riding range of anywhere
+export { CCELL };
 const CP = 0.95;
 const NAMES = ['Sajha Nagar', 'Seti City', 'Suryodaya Nagar', 'Phewa Valley',
   'Janajyoti City', 'Machhindra Nagar', 'Buddha Nagar', 'Himalaya Nagar',
