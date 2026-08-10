@@ -146,7 +146,9 @@ function check(name, ok, detail = '') {
     }, [yaw, tp]);
     prevPos = null;
     await page.keyboard.down('KeyW');
-    for (let i = 0; i < 80; i++) {
+    // 95 ticks/leg: the Phase 3L-1 world is denser (village obstacles), so
+    // the blind rider needs a little more wall time to cover distance.
+    for (let i = 0; i < 95; i++) {
       await sleep(100);
       if (i % 30 === 10) await page.keyboard.down(i % 60 < 30 ? 'KeyA' : 'KeyD');
       if (i % 30 === 20) { await page.keyboard.up('KeyA'); await page.keyboard.up('KeyD'); }
@@ -186,7 +188,7 @@ function check(name, ok, detail = '') {
   check('Rode a long distance in all directions', totalDist > 350, `${Math.round(totalDist)} m, ${crashes} crashes`); // blind rider variance; streaming stress also covered by teleport legs
   check('Chunk count stays bounded', maxChunks <= 25, `max=${maxChunks}`);
   check('Instance count stays bounded', maxInstances < 1700, `max=${maxInstances}`); // micro-prop budget added in 3C-1
-  check('Collider count stays bounded', maxColliders < 260, `max=${maxColliders}`);
+  check('Collider count stays bounded', maxColliders < 320, `max=${maxColliders}`); // Phase 3L-1 villages/mills add bounded collidable structures
   await sleep(2500); // teleport at the last leg enqueues a full ring; let it drain
   s = await state();
   check('Queue drains after riding', s.debug.queued <= 4, `queued=${s.debug.queued}`);

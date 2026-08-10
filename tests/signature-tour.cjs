@@ -73,6 +73,16 @@ function check(name, ok, detail = '') {
       const st = await page.evaluate(() => {
         const g = window.__game, A = window.__auto;
         if (g.state === 'crashed') return { crashed: true };
+        // Unstick (see the descent loop): back off a wedged rock and retry.
+        if (A.rev > 0) {
+          A.rev--;
+          g.input.throttle = 0; g.input.brake = 1; g.input.steer = A.revSteer;
+          return { crashed: false, frac: A.frac, dist: 1e9, summits: g.achievements.summitCount,
+            banner: document.getElementById('sb-name').textContent };
+        }
+        g.input.brake = 0;
+        A.stuck = g.bike.speed < 1 && g.input.throttle > 0 ? (A.stuck || 0) + 1 : 0;
+        if (A.stuck > 6) { A.rev = 10; A.revSteer = Math.random() < 0.5 ? 1 : -1; A.stuck = 0; }
         let p = g.world.roadPoint(A.m, A.frac, A.ri);
         const b = g.bike.position;
         while (Math.hypot(p.x - b.x, p.z - b.z) < 14 && A.frac < 1.02) {
@@ -148,11 +158,23 @@ function check(name, ok, detail = '') {
     });
     await sleep(600);
     let y0 = null, y1 = null;
-    for (let i = 0; i < 130; i++) {
+    // Wall-clock headroom for slow CI sandboxes (same reasoning as the
+    // climb loop): the descent itself takes a few seconds of game time.
+    for (let i = 0; i < 220; i++) {
       await sleep(110);
       const st = await page.evaluate(() => {
         const g = window.__game, A = window.__auto;
         if (g.state === 'crashed') return { crashed: true };
+        // Unstick: slow-poll autopilots can wedge against a trailside rock
+        // (a human just backs up); reverse briefly, then resume.
+        if (A.rev > 0) {
+          A.rev--;
+          g.input.throttle = 0; g.input.brake = 1; g.input.steer = A.revSteer;
+          return { crashed: false, y: g.bike.position.y };
+        }
+        g.input.brake = 0;
+        A.stuck = g.bike.speed < 1 && g.input.throttle > 0 ? (A.stuck || 0) + 1 : 0;
+        if (A.stuck > 6) { A.rev = 10; A.revSteer = Math.random() < 0.5 ? 1 : -1; A.stuck = 0; }
         let p = g.world.roadPoint(A.m, A.down);
         const b = g.bike.position;
         while (Math.hypot(p.x - b.x, p.z - b.z) < 12 && A.down > 0.06) {

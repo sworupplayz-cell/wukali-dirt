@@ -4,6 +4,7 @@ import { sstep } from './noise.js';
 import { ChunkManager, CHUNK_SIZE } from './ChunkManager.js';
 import { Mountains } from './Mountains.js';
 import { MountainImpostors } from './MountainImpostors.js';
+import { Villages } from './Villages.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -19,7 +20,8 @@ export class WorldManager {
     this.generator = new TerrainGenerator(seed);
     this.generator.getRegistry(); // eager: curated names apply from frame one
     this._buildLighting(scene);
-    this.chunks = new ChunkManager(scene, this.generator);
+    this.villages = new Villages(this.generator);
+    this.chunks = new ChunkManager(scene, this.generator, this.villages);
     this.mountains = new Mountains(scene, seed);
     this.impostors = new MountainImpostors(scene, this.generator);
     this._n = new THREE.Vector3();

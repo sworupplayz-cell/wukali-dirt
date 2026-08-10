@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { InstancedPool } from './InstancedPool.js';
 import { PROP } from './props.js';
 import { makeInfo } from './TerrainGenerator.js';
-import { mulberry32, hashInt, sstep, vnoise } from './noise.js';
+import { mulberry32, hashInt, hash01, sstep, vnoise } from './noise.js';
 
 /**
  * ChunkManager — endless world streaming.
@@ -33,9 +33,10 @@ const SKIRT = 3;       // skirt depth (m)
 const MAX_PROPS_PER_CHUNK = 44;
 
 export class ChunkManager {
-  constructor(scene, generator) {
+  constructor(scene, generator, villages = null) {
     this.scene = scene;
     this.gen = generator;
+    this.villages = villages;
     this.chunks = new Map();       // key -> chunk record
     this.queue = [];               // keys awaiting mesh build
     this.activeColliders = [];
@@ -298,6 +299,70 @@ export class ChunkManager {
       }
     }
 
+    // Phase 3L-1: village buildings owned by this chunk (placed through the
+    // normal prop/collider pipeline, so instancing + streaming are free).
+    // Villages also clear trees inside their footprint (see below).
+    let clearings = null;
+    if (this.villages) {
+      const vs = this.villages.forChunk(ox, oz, CHUNK_SIZE);
+      for (const v of vs) {
+        (clearings = clearings || []).push(v);
+        for (const it of v.items) {
+          if (it.x < ox || it.x >= ox + CHUNK_SIZE || it.z < oz || it.z >= oz + CHUNK_SIZE) continue;
+          c.props.push({ t: PROP[it.type], x: it.x, y: this.gen.height(it.x, it.z) - it.sink,
+            z: it.z, yaw: it.yaw, s: it.s });
+          if (it.collR > 0) c.colliders.push({ x: it.x, z: it.z, r: it.collR * it.s });
+        }
+      }
+    }
+    const inClearing = (x, z) => {
+      if (!clearings) return false;
+      for (const v of clearings) {
+        const dx = x - v.x, dz = z - v.z;
+        if (dx * dx + dz * dz < v.r * v.r) return true;
+      }
+      return false;
+    };
+
+    // Phase 3L-1 content draws from its OWN rng stream so pre-existing
+    // prop/rock/tree placements stay bit-identical to earlier phases.
+    const rng2 = mulberry32(hashInt(c.cx, c.cz, this.gen.seed ^ 0x7e11));
+
+    // Phase 3L-1: water mill — rare, beside a stream, one per lucky chunk.
+    if (hash01(c.cx, c.cz, this.gen.seed * 41 + 3) < 0.22) {
+      for (let k2 = 0; k2 < 14; k2++) {
+        const x = ox + rng2() * CHUNK_SIZE, z = oz + rng2() * CHUNK_SIZE;
+        this.gen.sampleInfo(x, z, info);
+        if (info.stream < 0.3 || info.stream > 0.8 || info.trail > 0.3 || info.mtn > 0.02) continue;
+        if (this._normalY(x, z) < 0.9) continue;
+        c.props.push({ t: PROP.mill, x, y: this.gen.height(x, z) - 0.25, z,
+          yaw: rng2() * Math.PI * 2, s: 1 });
+        c.colliders.push({ x, z, r: 2.1 });
+        break;
+      }
+    }
+
+    // Phase 3L-1: corn fields — clumped rows on flat (non-terraced) farms.
+    for (let k2 = 0; k2 < 14 && c.props.length < MAX_PROPS_PER_CHUNK + 12; k2++) {
+      const x = ox + rng2() * CHUNK_SIZE;
+      const z = oz + rng2() * CHUNK_SIZE;
+      this.gen.sampleInfo(x, z, info);
+      if (info.wFa < 0.5 || info.terr > 0.25) continue;
+      if (info.trail > 0.3 || info.stream > 0.15) continue;
+      if (this.gen.nearFeature(x, z) || inClearing(x, z)) continue;
+      const patch = vnoise(x * 0.03 + 21.4, z * 0.03 - 9.2, this.gen.seed * 13 + 93);
+      if (patch < 0.55) continue;
+      // A short row of clumps reads as a planted field.
+      const a = Math.round(vnoise(x * 0.008, z * 0.008, this.gen.seed + 7) * 4) * (Math.PI / 4);
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const n = 2 + (rng2() * 2 | 0);
+      for (let i = 0; i < n && c.props.length < MAX_PROPS_PER_CHUNK + 12; i++) {
+        const cx2 = x + dx * i * 1.7, cz2 = z + dz * i * 1.7;
+        c.props.push({ t: PROP.corn, x: cx2, y: this.gen.height(cx2, cz2) - 0.05, z: cz2,
+          yaw: rng2() * Math.PI * 2, s: 0.85 + rng2() * 0.35 });
+      }
+    }
+
     // Micro-props: grass tufts, small stones, fallen branches. Denser and
     // road-tolerant (they may line trail edges), never collide, and their
     // density follows a coherent patch noise so meadows/clearings vary.
@@ -326,6 +391,7 @@ export class ChunkManager {
       this.gen.sampleInfo(x, z, info);
       if (info.trail > 0.25 || info.stream > 0.15) continue;   // keep paths ridable
       if (this.gen.nearFeature(x, z)) continue;                // clear jump landings
+      if (inClearing(x, z)) continue;                          // village footprints stay open
       const ny = this._normalY(x, z);
       const pick = rng();
 

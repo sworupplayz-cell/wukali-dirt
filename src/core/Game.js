@@ -238,6 +238,14 @@ export class Game {
       }
       // Stunt/off-road/trail challenges (Phase 3K-3).
       if (this.state === State.PLAYING) this.challenges.update(this.bike, frameDt);
+      // Village discoveries (Phase 3L-1).
+      if (this.state === State.PLAYING) {
+        const v = this.world.villages.update(this.bike.position.x, this.bike.position.z, frameDt);
+        if (v) {
+          const res = this.achievements.discover(v.id, v.name);
+          if (res && this.onDiscover) this.onDiscover({ ...res, type: 'village' });
+        }
+      }
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(
         Math.abs(this.bike.speed) / 26,

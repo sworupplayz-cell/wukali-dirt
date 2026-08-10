@@ -199,6 +199,46 @@ function rampDeck() {
 }
 
 /** Prop type registry: name, geometry factory, pool capacity, double-sided? */
+function corn() {
+  // Corn clump: three tall stalks with drooping leaves (Phase 3L-1 farms).
+  const parts = [];
+  const spots = [[0, 0], [0.45, 0.3], [-0.35, 0.42]];
+  for (let i = 0; i < 3; i++) {
+    const [sx, sz] = spots[i];
+    const h = 1.5 + i * 0.18;
+    parts.push(colorize(new THREE.CylinderGeometry(0.035, 0.06, h, 4), 0.44, 0.56, 0.2)
+      .translate(sx, h / 2, sz));
+    parts.push(colorize(new THREE.ConeGeometry(0.09, 0.5, 4), 0.78, 0.68, 0.3)
+      .translate(sx, h + 0.2, sz));
+    parts.push(colorize(new THREE.PlaneGeometry(0.5, 0.16), 0.5, 0.62, 0.24)
+      .rotateZ(-0.5).rotateY(i * 2.1).translate(sx, h * 0.55, sz));
+    parts.push(colorize(new THREE.PlaneGeometry(0.45, 0.14), 0.46, 0.58, 0.22)
+      .rotateZ(0.55).rotateY(i * 2.1 + 1.2).translate(sx, h * 0.4, sz));
+  }
+  return merge(parts);
+}
+
+function waterMill() {
+  // Stream-side water mill: stone hut, pitched roof, wooden paddle wheel.
+  const hut = colorize(new THREE.BoxGeometry(2.4, 1.9, 2.2), 0.58, 0.56, 0.52).translate(0, 0.95, 0);
+  const roof = colorize(new THREE.ConeGeometry(2.1, 1.2, 4), 0.36, 0.27, 0.2)
+    .rotateY(Math.PI / 4).translate(0, 2.5, 0);
+  const door = colorize(new THREE.BoxGeometry(0.7, 1.2, 0.1), 0.24, 0.16, 0.1).translate(0.4, 0.6, 1.12);
+  const parts = [hut, roof, door];
+  // Wheel on the side: rim + 4 paddles, plane faces along X.
+  const rim = colorize(new THREE.TorusGeometry(1.0, 0.1, 5, 10), 0.42, 0.3, 0.18)
+    .rotateY(Math.PI / 2).translate(1.55, 0.85, 0);
+  parts.push(rim);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    parts.push(colorize(new THREE.BoxGeometry(0.08, 0.55, 0.42), 0.5, 0.36, 0.22)
+      .rotateX(a).translate(1.55, 0.85 + Math.cos(a) * 0.95, Math.sin(a) * 0.95));
+  }
+  parts.push(colorize(new THREE.CylinderGeometry(0.09, 0.09, 1.4, 5), 0.4, 0.3, 0.18)
+    .rotateZ(Math.PI / 2).translate(0.9, 0.85, 0));
+  return merge(parts);
+}
+
 export const PROP_TYPES = [
   { name: 'pine', build: pine, max: 800 },
   { name: 'tree', build: broadleaf, max: 420 },
@@ -216,6 +256,9 @@ export const PROP_TYPES = [
   { name: 'grass', build: grass, max: 1000, doubleSided: true },
   { name: 'stone', build: stone, max: 450 },
   { name: 'branch', build: branch, max: 160 },
+  // Phase 3L-1 rural world.
+  { name: 'corn', build: corn, max: 520, doubleSided: true },
+  { name: 'mill', build: waterMill, max: 10 },
 ];
 
 export const PROP = {};
