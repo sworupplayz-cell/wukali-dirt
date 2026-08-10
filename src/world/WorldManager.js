@@ -9,6 +9,7 @@ import { Towns } from './Towns.js';
 import { Cities } from './Cities.js';
 import { Industrial } from './Industrial.js';
 import { Population } from './Population.js';
+import { NepalMacro } from './NepalTerrain.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -19,9 +20,12 @@ import { Population } from './Population.js';
  * by the game loop — the bike knows nothing about chunks.
  */
 export class WorldManager {
-  constructor(scene, seed = 20) {
+  constructor(scene, seed = 20, opts = {}) {
     this.seed = seed;
-    this.generator = new TerrainGenerator(seed);
+    // Phase W-3B: `?world=nepal` opts into the fixed-world terrain
+    // foundation. The default game keeps macro = null (bit-identical).
+    this.nepalMode = !!opts.nepal;
+    this.generator = new TerrainGenerator(seed, this.nepalMode ? new NepalMacro() : null);
     this.generator.getRegistry(); // eager: curated names apply from frame one
     this._buildLighting(scene);
     this.villages = new Villages(this.generator);

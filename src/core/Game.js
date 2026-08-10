@@ -41,8 +41,10 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(68, 1, 0.1, 5200); // far covers the ridge backdrop
 
     // Deterministic world; ?seed=N in the URL selects a different one.
-    const seed = Number(new URLSearchParams(location.search).get('seed')) || 20;
-    this.world = new WorldManager(this.scene, seed);
+    // Phase W-3B: ?world=nepal previews the fixed Nepal terrain foundation.
+    const params = new URLSearchParams(location.search);
+    const seed = Number(params.get('seed')) || 20;
+    this.world = new WorldManager(this.scene, seed, { nepal: params.get('world') === 'nepal' });
     this.bike = new Bike(this.world);
     this.bikeModel = new BikeModel(this.scene);
     this.followCam = new FollowCamera(this.camera, this.world);

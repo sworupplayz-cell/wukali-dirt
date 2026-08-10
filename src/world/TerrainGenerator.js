@@ -88,8 +88,11 @@ const SIG_PARAMS = [
 ];
 
 export class TerrainGenerator {
-  constructor(seed = 20) {
+  constructor(seed = 20, macro = null) {
     this.seed = seed | 0;
+    // Phase W-3B: optional large-scale macro-terrain hook (Nepal fixed-world
+    // foundation). Null in the default game — zero cost, zero change.
+    this.macro = macro;
     const s = this.seed * 13;
     // Channel salts (one per noise field).
     this.SM = s + 1;  // mountainness
@@ -757,6 +760,7 @@ export class TerrainGenerator {
     }
 
     if (withFeatures) h = this._features(x, z, h);
+    if (this.macro) h = this.macro.apply(x, z, h);
     return h;
   }
 
