@@ -1,4 +1,5 @@
 import { hash01 } from './noise.js';
+import { CITIES } from './NepalBlueprint.js';
 
 /**
  * NepalRoadside (Phase W-3F) — infrastructure along the planned Nepal road
@@ -86,6 +87,15 @@ export class NepalRoadside {
     const put = (x, z, item) => recFor(x, z).items.push(item);
     const it = (type, x, z, yaw, s = 1, collR = 0, sink = 0.2) =>
       ({ type, x, z, yaw, s, collR, sink });
+    const info = { h: 0, wH: 0, wF: 0, wFa: 0, wRk: 0, wMnt: 0, lo: 0, trail: 0, stream: 0,
+      terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0, mtnKind: 0, mtnRef: null, snowOff: 0 };
+    const slopeOk = (x, z, lim) => {
+      const sl = Math.abs(gen.height(x + 3, z) - gen.height(x - 3, z)) +
+                 Math.abs(gen.height(x, z + 3) - gen.height(x, z - 3));
+      return sl < lim;
+    };
+    const infraOk = (x, z) =>
+      slopeOk(x, z, 0.6) && !water.submerged(x, z, gen.height(x, z));
 
     for (const route of roads.routes) {
       const hw = route.kind === 'highway';
@@ -125,20 +135,23 @@ export class NepalRoadside {
         // Bus stops on highways every ~22 nodes.
         if (hw && i % 22 === 11 && h < 0.8) {
           const bx = p.x + px * side * (off + 1.2), bz = p.z + pz * side * (off + 1.2);
-          put(bx, bz, it('busstop', bx, bz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 0, 0.2));
+          if (infraOk(bx, bz)) put(bx, bz, it('busstop', bx, bz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 0, 0.2));
         }
         // Fuel stations every ~37 highway nodes.
         if (hw && i % 37 === 18 && h < 0.7) {
           const fx = p.x + px * side * (off + 4), fz = p.z + pz * side * (off + 4);
-          const rec = it('fuel', fx, fz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 1.6, 0.2);
-          put(fx, fz, rec);
-          put(fx, fz, it('parklot', fx + px * side * 6, fz + pz * side * 6, yawR, 1, 0, 0.12));
+          if (infraOk(fx, fz)) {
+            put(fx, fz, it('fuel', fx, fz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 1.6, 0.2));
+            put(fx, fz, it('parklot', fx + px * side * 6, fz + pz * side * 6, yawR, 1, 0, 0.12));
+          }
         }
         // Rest areas (chiya pasal + parking) every ~29 nodes.
         if (i % 29 === 7 && h < 0.6) {
           const rx = p.x + px * side * (off + 3), rz = p.z + pz * side * (off + 3);
-          put(rx, rz, it('teashop', rx, rz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 2.2, 0.2));
-          put(rx, rz, it('parklot', rx + dx * 9, rz + dz * 9, yawR, 1, 0, 0.12));
+          if (infraOk(rx, rz)) {
+            put(rx, rz, it('teashop', rx, rz, yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, 2.2, 0.2));
+            put(rx, rz, it('parklot', rx + dx * 9, rz + dz * 9, yawR, 1, 0, 0.12));
+          }
         }
         // Scenic viewpoints: mountain nodes standing proud of their neighbors.
         if (!hw && i % 13 === 6) {
@@ -155,6 +168,155 @@ export class NepalRoadside {
         }
       }
     }
+    // ---- W-3H: settlement hierarchy ----------------------------------------
+    // Anchors (the six blueprint cities) → towns → villages, placed along
+    // the roads with believable spacing; the W-3G hamlet pass below fills
+    // the rural gaps and thickens near towns (gradual rural → urban).
+    // No detailed city cores yet — anchors are large town-scale fields.
+    this.settlements = [];
+    const nearSettlement = (x, z, minD) => {
+      for (const s of this.settlements) {
+        if (Math.hypot(x - s.x, z - s.z) < Math.max(minD, s.r * 0.5 + minD * 0.5)) return true;
+      }
+      return false;
+    };
+    const spotOk = (x, z, slopeLim = 0.55) => {
+      if (!slopeOk(x, z, slopeLim)) return false;
+      if (water.submerged(x, z, gen.height(x, z))) return false;
+      if (roads.query(x, z).mask > 0.25) return false;
+      gen.masksAt(x, z, info);
+      return info.trail < 0.3 && info.stream < 0.3 && info.mtn < 0.02;
+    };
+    const hCls = (x, z) => {
+      const h = hash01(Math.round(x * 3), Math.round(z * 3), SALT + 41);
+      return h < 0.35 ? 0.95 : h < 0.7 ? 1.05 : 1.15;
+    };
+    /** Lay a settlement strip along `route` starting at node i0. */
+    const buildSettlement = (route, i0, kind, cfg) => {
+      const pts = route.pts;
+      const iEnd = Math.min(pts.length - 2, i0 + cfg.spanNodes);
+      const c = pts[(i0 + iEnd) >> 1];
+      let placedH = 0, placedS = 0;
+      const sList = cfg.services.slice();
+      const nodeBudget = Math.ceil(cfg.maxH / (cfg.spanNodes + 1));
+      for (let i = i0; i <= iEnd; i++) {
+        let nodeH = 0;
+        const p = pts[i], q = pts[i + 1];
+        const len = Math.hypot(q.x - p.x, q.z - p.z) || 1;
+        const dx = (q.x - p.x) / len, dz = (q.z - p.z) / len;
+        const px = -dz, pz = dx;
+        const yawR = Math.atan2(dx, dz);
+        const nPer = Math.ceil(len / cfg.sp);
+        for (let k = 0; k < nPer; k++) {
+          const along = (k + 0.5) / nPer;
+          for (const side of [-1, 1]) {
+            for (let row = 0; row < cfg.rows; row++) {
+              if (placedH >= cfg.maxH || nodeH >= nodeBudget) break;
+              const hh = hash01(i * 31 + k * 7 + row * 3 + side + 1,
+                Math.round(p.x * 0.01), SALT + 43);
+              if (hh > cfg.density) continue;
+              const off = route.w + 7.5 + row * 9 + hh * 3;
+              const hx = p.x + dx * along * len + px * side * off;
+              const hz = p.z + dz * along * len + pz * side * off;
+              if (!spotOk(hx, hz)) continue;
+              const rec = recFor(hx, hz, 14);
+              const yawFace = yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
+              const pickT = hash01(Math.round(hx), Math.round(hz), SALT + 47);
+              const typ = kind === 'hamlet' || pickT < cfg.plainHouse ? 'house'
+                : pickT < cfg.plainHouse + 0.5 * (1 - cfg.plainHouse) ? 'townhouseA' : 'townhouseB';
+              rec.items.push(it(typ, hx, hz, yawFace, typ === 'house' ? 1 : hCls(hx, hz),
+                typ === 'house' ? 2.4 : 2.6, 0.22));
+              placedH++;
+              nodeH++;
+            }
+          }
+        }
+        // Services face the road near the settlement middle.
+        if (sList.length && Math.abs(i - ((i0 + iEnd) >> 1)) <= 2) {
+          while (sList.length && placedS < cfg.services.length) {
+            const typ = sList.shift();
+            const side = (placedS & 1) ? -1 : 1;
+            const sx = p.x + px * side * (route.w + 6.5) + dx * placedS * 9;
+            const sz = p.z + pz * side * (route.w + 6.5) + dz * placedS * 9;
+            if (spotOk(sx, sz, 0.5)) {
+              const rec = recFor(sx, sz, 12);
+              const collR = typ === 'school' ? 3.8 : typ === 'clinic' ? 2.4
+                : typ === 'fuel' ? 1.6 : typ === 'stall' ? 1.2 : typ === 'stupa' ? 1.1
+                : typ === 'busstop' || typ === 'flagpole' || typ === 'parklot' ? 0.3 : 2.2;
+              rec.items.push(it(typ, sx, sz,
+                Math.atan2(dx, dz) + (side > 0 ? -Math.PI / 2 : Math.PI / 2), 1, collR, 0.2));
+              placedS++;
+            } else {
+              placedS++;
+            }
+          }
+        }
+      }
+      if (placedH >= cfg.minH) {
+        this.settlements.push({ kind, x: c.x, z: c.z, r: cfg.spanNodes * 55, houses: placedH });
+        return true;
+      }
+      return false;
+    };
+
+    // Pass 1: urban anchors at the six blueprint cities.
+    for (const city of CITIES) {
+      const ax = (city.u - 0.5) * 50000, az = (0.5 - city.v) * 50000;
+      let best = null, bi = 0, bd = 1e18;
+      for (const route of roads.routes) {
+        for (let i = 2; i < route.pts.length - 1; i++) {
+          const d = (route.pts[i].x - ax) ** 2 + (route.pts[i].z - az) ** 2;
+          if (d < bd) { bd = d; best = route; bi = i; }
+        }
+      }
+      if (best && bd < 600 * 600) {
+        const i0 = Math.max(2, Math.min(bi - 3, best.pts.length - 9));
+        buildSettlement(best, i0, 'anchor', {
+          spanNodes: 6, sp: 13, rows: 2, density: 0.85, maxH: 55, minH: 12,
+          plainHouse: 0.35,
+          services: ['shop', 'shop', 'teashop', 'school', 'clinic', 'fuel',
+            'busstop', 'busstop', 'stall', 'stall', 'parklot', 'stupa'],
+        });
+      }
+    }
+    // Pass 2: towns along highways (spacing-controlled; none in the dry zone).
+    for (const route of roads.routes) {
+      if (route.kind !== 'highway') continue;
+      for (let i = 6; i < route.pts.length - 10; i += 4) {
+        const p = route.pts[i];
+        const v = 0.5 - p.z / 50000;
+        if (hash01(i, Math.round(p.x * 0.01), SALT + 53) > 0.45) continue;
+        const spacing = v < 0.155 ? 3600 : 2400; // Terai towns spread farther
+        if (nearSettlement(p.x, p.z, spacing)) continue;
+        gen.sampleInfo(p.x, p.z, info);
+        if (info.dry > 0.6 || info.wRk + info.wMnt > 0.6) continue;
+        buildSettlement(route, i, 'town', {
+          spanNodes: 4, sp: 15, rows: 2, density: 0.7,
+          maxH: 20 + ((hash01(i, 3, SALT + 59) * 20) | 0), minH: 9,
+          plainHouse: 0.5,
+          services: ['shop', 'teashop', 'school', 'clinic', 'fuel', 'busstop', 'stall'],
+        });
+      }
+    }
+    // Pass 3: villages along all routes (sparse + huddled in the dry zone).
+    for (const route of roads.routes) {
+      for (let i = 4; i < route.pts.length - 6; i += 3) {
+        const p = route.pts[i];
+        if (hash01(i * 7, Math.round(p.z * 0.01), SALT + 61) > 0.4) continue;
+        if (nearSettlement(p.x, p.z, 850)) continue;
+        gen.sampleInfo(p.x, p.z, info);
+        if (info.wRk + info.wMnt > (info.dry > 0.6 ? 0.85 : 0.6)) continue;
+        const dry = info.dry > 0.6;
+        if (dry && hash01(i, 11, SALT + 67) > 0.4) continue; // Mustang: rare
+        buildSettlement(route, i, 'village', {
+          spanNodes: 2, sp: dry ? 9 : 13, rows: 1, density: dry ? 0.8 : 0.65,
+          maxH: dry ? 8 : 8 + ((hash01(i, 5, SALT + 71) * 8) | 0), minH: 4,
+          plainHouse: 1,
+          services: dry ? ['stupa', 'wall'] : ['teashop', 'stall', 'stupa'],
+        });
+      }
+    }
+
     // ---- W-3G: road-based settlement clusters ------------------------------
     // Houses grow in believable clusters beside the roads, patterned by
     // region: spread Terai farmsteads, tight Middle-Hills clusters, dense
@@ -166,13 +328,6 @@ export class NepalRoadside {
     const eW2 = (e, u, v) => {
       const du = (u - e.cu) / e.ru, dv = (v - e.cv) / e.rv;
       return du * du + dv * dv < 1.1;
-    };
-    const info = { h: 0, wH: 0, wF: 0, wFa: 0, wRk: 0, wMnt: 0, lo: 0, trail: 0, stream: 0,
-      terr: 0, jit: 0, dry: 0, mtn: 0, mtnH: 0, mtnKind: 0, mtnRef: null, snowOff: 0 };
-    const slopeOk = (x, z, lim) => {
-      const s = Math.abs(gen.height(x + 3, z) - gen.height(x - 3, z)) +
-                Math.abs(gen.height(x, z + 3) - gen.height(x, z - 3));
-      return s < lim;
     };
     let clusterCount = 0;
     for (const route of roads.routes) {
@@ -203,7 +358,16 @@ export class NepalRoadside {
         else if (inChitwan) pat = { n: 2 + (hGate * 9 | 0) % 2, sp: 13, row: false, clearR: 7, prob: 0.45, scale: 1 };
         else if (terai) pat = { n: 3 + (hGate * 13 | 0) % 3, sp: 17, row: false, clearR: 15, prob: 0.6, scale: 1.1 };
         else pat = { n: 4 + (hGate * 17 | 0) % 3, sp: 9.5, row: false, clearR: 13, prob: 0.5, scale: 1 };
-        if (hash01(i, Math.round(p.z * 0.01), SALT + 13) > pat.prob) continue;
+        // W-3H: hamlets keep clear of villages/towns/anchors, but thicken
+        // in the 260-700 m outskirt belt (gradual rural -> urban feel).
+        let distS = 1e9;
+        for (const st of this.settlements) {
+          const d = Math.hypot(p.x - st.x, p.z - st.z);
+          if (d < distS) distS = d;
+        }
+        if (distS < 260) continue;
+        const prob = pat.prob * (distS < 700 ? 1.5 : 1);
+        if (hash01(i, Math.round(p.z * 0.01), SALT + 13) > prob) continue;
 
         const cOff = route.w + 11 + hash01(i, 5, SALT + 17) * 8;
         const cx = p.x + px * side * cOff, cz = p.z + pz * side * cOff;
