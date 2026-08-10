@@ -106,10 +106,42 @@ export class NepalMacro {
     return BELT[BELT.length - 1][c];
   }
 
-  /** The macro transform: final = macroH + proceduralH * detailMul. */
+  /** The macro transform: final = macroH + proceduralH * detailMul.
+   *  W-3E: planned roads cut a subtle hillside bench (cross-slope eased
+   *  toward the route centerline) — how real hill roads are built. */
   apply(x, z, proceduralH) {
     const m = this._macro(x, z, this._scratch);
-    return m.h + proceduralH * m.mul;
+    let h = m.h, mul = m.mul;
+    if (this.roads) {
+      const q = this.roads.query(x, z);
+      if (q.shelf > 0) {
+        h += (q.centerH - h) * q.shelf * 0.75;
+        mul *= 1 - 0.6 * q.shelf;
+      }
+    }
+    return h + proceduralH * mul;
+  }
+
+  /** Attach the planned road network (after construction; W-3E). */
+  attachRoads(roads) {
+    this.roads = roads;
+  }
+
+  /** Inverse of apply(): recover the PROCEDURAL height from a final one.
+   *  Used when features (bridges/ramps) store absolute deck heights at
+   *  creation time — they must be stored in procedural space, or the macro
+   *  would be added twice on application (the W-3E needle-wall bug). */
+  unapply(x, z, hTotal) {
+    const m = this._macro(x, z, this._scratch2);
+    let h = m.h, mul = m.mul;
+    if (this.roads) {
+      const q = this.roads.query(x, z);
+      if (q.shelf > 0) {
+        h += (q.centerH - h) * q.shelf * 0.75;
+        mul *= 1 - 0.6 * q.shelf;
+      }
+    }
+    return (hTotal - h) / Math.max(0.2, mul);
   }
 
   /** Height RELATIVE to the macro surface — the local micro-relief the

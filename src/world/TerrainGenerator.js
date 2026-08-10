@@ -372,10 +372,12 @@ export class TerrainGenerator {
         // Ravine + wooden deck cut across the road at fixed route fractions.
         meta.bridgePts = SIG_PARAMS[meta.kind - 1].bridges.map((f) => {
           const p = this.roadPoint(mn, f);
+          const hTot = this.height(p.x, p.z);
           return {
             x: p.x, z: p.z,
             dx: Math.sin(p.yaw), dz: Math.cos(p.yaw),
-            h0: this.height(p.x, p.z) + 0.1, // pre-ravine road level
+            // pre-ravine road level, stored in PROCEDURAL space (nepal mode)
+            h0: (this.macro ? this.macro.unapply(p.x, p.z, hTot) : hTot) + 0.1,
           };
         });
         mn.bridgePts = meta.bridgePts;
@@ -703,6 +705,12 @@ export class TerrainGenerator {
       sstep(wV, wV * 0.4, Math.abs(t1)),
       sstep(wV * 0.85, wV * 0.35, Math.abs(t2))
     ) * (1 - mCore);
+    // W-3E: the planned Nepal highway/mountain network paints through the
+    // same trail pipeline (dirt surface, detail smoothing, road grip).
+    if (this.macro && this.macro.roads) {
+      const rq = this.macro.roads.query(x, z);
+      if (rq.mask > trailM) trailM = rq.mask;
+    }
     // The mountain road flattens base-terrain detail along its band both on
     // and off the dome (the dome's own slope is cancelled separately below);
     // on the dome it references the smoothest single-octave base so the
@@ -822,7 +830,10 @@ export class TerrainGenerator {
           this._sample(bx, bz, info, false, true);
           if (info.trail > 0.5 && info.stream > 0.62 && this._domeProf(bx, bz) < 0.03) {
             const d = this._trailDir(bx, bz);
-            const h0 = this._sample(bx, bz, null, false, false) + 0.12; // bank height (no carve)
+            let h0 = this._sample(bx, bz, null, false, false) + 0.12; // bank height (no carve)
+            // Nepal mode: store deck heights in PROCEDURAL space — features
+            // apply before the macro, which would otherwise be added twice.
+            if (this.macro) h0 = this.macro.unapply(bx, bz, h0 - 0.12) + 0.12;
             return { type: 'bridge', x: bx, z: bz, dx: d.x, dz: d.z, h0 };
           }
         }
@@ -835,9 +846,10 @@ export class TerrainGenerator {
       if (info.trail > 0.45 && info.lo > 0.35 && this._domeProf(px, pz) < 0.03) {
         const d = this._trailDir(px, pz);
         if (hash01(cx, cz, this.SF + 3) < 0.5) { d.x = -d.x; d.z = -d.z; }
-        const h0 = this._sample(px, pz, null, false, true);
+        let h0 = this._sample(px, pz, null, false, true);
         const hLand = this._sample(px + d.x * 18, pz + d.z * 18, null, false, true);
         if (hLand < h0 + 1.8 && hLand > h0 - 9) {
+          if (this.macro) h0 = this.macro.unapply(px, pz, h0); // procedural space
           return { type: 'ramp', x: px, z: pz, dx: d.x, dz: d.z, h0 };
         }
       }

@@ -11,6 +11,7 @@ import { Industrial } from './Industrial.js';
 import { Population } from './Population.js';
 import { NepalMacro } from './NepalTerrain.js';
 import { NepalWater } from './NepalWater.js';
+import { NepalRoads } from './NepalRoads.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -27,6 +28,13 @@ export class WorldManager {
     // foundation. The default game keeps macro = null (bit-identical).
     this.nepalMode = !!opts.nepal;
     this.generator = new TerrainGenerator(seed, this.nepalMode ? new NepalMacro() : null);
+    // Phase W-3E: plan the fixed-world road network, then let the terrain
+    // paint it (trail mask) and bench it (macro shelf). Nepal mode only.
+    this.roads = null;
+    if (this.nepalMode) {
+      this.roads = new NepalRoads(this.generator.macro);
+      this.generator.macro.attachRoads(this.roads);
+    }
     this.generator.getRegistry(); // eager: curated names apply from frame one
     this._buildLighting(scene);
     this.villages = new Villages(this.generator);
