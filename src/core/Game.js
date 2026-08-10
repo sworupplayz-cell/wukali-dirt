@@ -261,6 +261,8 @@ export class Game {
           const res = this.achievements.discover(iz.id, iz.name);
           if (res && this.onDiscover) this.onDiscover({ ...res, type: iz.kind });
         }
+        // Ambient NPCs + traffic (Phase 3N): pooled, no colliders, no physics.
+        this.world.population.update(this.bike.position.x, this.bike.position.z, frameDt);
       }
       this.followCam.update(this.bike, frameDt);
       this.audio.setEngine(

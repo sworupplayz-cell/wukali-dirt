@@ -8,6 +8,7 @@ import { Villages } from './Villages.js';
 import { Towns } from './Towns.js';
 import { Cities } from './Cities.js';
 import { Industrial } from './Industrial.js';
+import { Population } from './Population.js';
 
 /**
  * WorldManager — endless procedural world facade.
@@ -27,6 +28,7 @@ export class WorldManager {
     this.towns = new Towns(this.generator, this.villages);
     this.cities = new Cities(this.generator, this.villages, this.towns);
     this.industry = new Industrial(this.generator, this.cities);
+    this.population = new Population(scene, this.generator, this.villages, this.towns, this.cities, this.industry);
     this.chunks = new ChunkManager(scene, this.generator, this.villages, this.towns, this.cities, this.industry);
     this.mountains = new Mountains(scene, seed);
     this.impostors = new MountainImpostors(scene, this.generator);
