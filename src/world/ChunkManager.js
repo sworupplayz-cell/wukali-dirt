@@ -317,11 +317,20 @@ export class ChunkManager {
           if (it.x < ox || it.x >= ox + CHUNK_SIZE || it.z < oz || it.z >= oz + CHUNK_SIZE) continue;
           const iy = this.gen.height(it.x, it.z);
           if (this.water && this.water.submerged(it.x, it.z, iy)) continue; // W-3D
+          // W-3G (nepal): houses get deterministic scale variants (audited
+          // up to believable proportions) and never overlap planned roads.
+          let sMul = 1;
+          if (this.gen.macro && it.type === 'house') {
+            if (this.gen.macro.roads &&
+                this.gen.macro.roads.query(it.x, it.z).mask > 0.35) continue;
+            const hs = hash01(Math.round(it.x * 3), Math.round(it.z * 3), this.gen.seed * 37 + 91);
+            sMul = hs < 0.3 ? 1.15 : hs < 0.65 ? 1.3 : hs < 0.9 ? 1.45 : 1.6;
+          }
           const prop = { t: PROP[it.type], x: it.x, y: iy - it.sink,
-            z: it.z, yaw: it.yaw, s: it.s };
+            z: it.z, yaw: it.yaw, s: it.s * sMul };
           if (it.rx) prop.rx = it.rx; // terrain-pitched strips (city streets)
           c.props.push(prop);
-          if (it.collR > 0) c.colliders.push({ x: it.x, z: it.z, r: it.collR * it.s });
+          if (it.collR > 0) c.colliders.push({ x: it.x, z: it.z, r: it.collR * it.s * sMul });
         }
       }
     };
@@ -520,7 +529,7 @@ export class ChunkManager {
       }
       else if (pick < (acc += 0.14 * wF)) { t = PROP.log; s = 0.8 + rng() * 0.5; }
       else if (pick < (acc += 0.22 * wFa) && ny > 0.9) { t = PROP.haystack; s = 0.8 + rng() * 0.5; }
-      else if (pick < (acc += 0.05 * wFa + 0.012 * wH) && ny > 0.955) { t = PROP.house; collR = 2.4; sink = 0.2; }
+      else if (pick < (acc += 0.05 * wFa + 0.012 * wH) && ny > 0.955 && !this.gen.macro) { t = PROP.house; collR = 2.4; sink = 0.2; }
       else if (pick < (acc += 0.16 * wFa) && ny > 0.9) { t = PROP.wall; s = 0.9 + rng() * 0.4; sink = 0.15; }
       else if (pick < (acc += 0.012 * (wMnt + wRk)) && ny > 0.9) { t = PROP.flagpole; collR = 0.3; }
       else if (pick < (acc += 0.007 * (wMnt + wRk + wH)) && ny > 0.93) { t = PROP.stupa; collR = 1.1; sink = 0.15; }

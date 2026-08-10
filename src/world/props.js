@@ -725,7 +725,7 @@ export const PROP_TYPES = [
   { name: 'rock', build: rock, max: 620 },
   { name: 'log', build: log, max: 170 },
   { name: 'haystack', build: haystack, max: 90 },
-  { name: 'house', build: house, max: 48 },
+  { name: 'house', build: house, max: 72 },
   { name: 'wall', build: wall, max: 140 },
   { name: 'flagpole', build: flagpole, max: 48, doubleSided: true },
   { name: 'stupa', build: stupa, max: 16 },
