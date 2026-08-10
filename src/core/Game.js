@@ -40,11 +40,11 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(68, 1, 0.1, 5200); // far covers the ridge backdrop
 
-    // Deterministic world; ?seed=N in the URL selects a different one.
-    // Phase W-3B: ?world=nepal previews the fixed Nepal terrain foundation.
+    // Phase W-3J: the Nepal fixed world IS the game. `?world=default`
+    // keeps the original procedural world as a fallback/debug mode.
     const params = new URLSearchParams(location.search);
     const seed = Number(params.get('seed')) || 20;
-    this.world = new WorldManager(this.scene, seed, { nepal: params.get('world') === 'nepal' });
+    this.world = new WorldManager(this.scene, seed, { nepal: params.get('world') !== 'default' });
     this.bike = new Bike(this.world);
     this.bikeModel = new BikeModel(this.scene);
     this.followCam = new FollowCamera(this.camera, this.world);

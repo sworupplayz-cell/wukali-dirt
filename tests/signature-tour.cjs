@@ -29,9 +29,9 @@ function check(name, ok, detail = '') {
   await page.setViewport({ width: 850, height: 400 });
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
-  await page.goto('http://localhost:3000', { waitUntil: 'networkidle0', timeout: 30000 });
+  await page.goto('http://localhost:3000/?world=default', { waitUntil: 'networkidle0', timeout: 30000 });
   await page.evaluate(() => localStorage.removeItem('wukali_achievements'));
-  await page.goto('http://localhost:3000', { waitUntil: 'networkidle0' });
+  await page.goto('http://localhost:3000/?world=default', { waitUntil: 'networkidle0' });
   await sleep(1800);
   await page.click('#btn-play');
   await sleep(300);

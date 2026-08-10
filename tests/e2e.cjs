@@ -14,7 +14,7 @@ const req = createRequire('/tmp/e2e/x.js');
 const chromium = req('@sparticuz/chromium').default;
 const puppeteer = req('puppeteer-core');
 
-const URL = 'http://localhost:3000';
+const URL = 'http://localhost:3000/?world=default'; // W-3J: suite validates the legacy procedural world
 const SHOT = (n) => `/tmp/shot-${n}.png`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -651,7 +651,7 @@ function check(name, ok, detail = '') {
   const regNow = reg.map((m) => ({ id: m.id, name: m.name, sig: m.sig, x: m.x, z: m.z }));
   check('Same seed => identical registry', JSON.stringify(reg2) === JSON.stringify(regNow));
 
-  await page.goto(URL + '/?seed=99', { waitUntil: 'networkidle0' });
+  await page.goto(URL + '&seed=99', { waitUntil: 'networkidle0' });
   await sleep(1200);
   const alt = await page.evaluate(() => {
     const gen = window.__game.world.generator;

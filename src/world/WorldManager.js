@@ -162,6 +162,39 @@ export class WorldManager {
    *  enough to reach in a minute, far enough to require actually riding). */
   getSpawn() {
     if (this._spawn) return this._spawn;
+    // W-3J: Nepal world spawns on the Prithvi Highway ~800 m outside
+    // Pokhara — a scenic, safe roadside start with the city core straight
+    // ahead and the Annapurna wall behind it. Deterministic (fixed route
+    // geometry); falls through to the legacy scan if anything is missing.
+    if (this.nepalMode && this.roads && this.roadside) {
+      const city = this.roadside.settlements.find((s) => s.kind === 'city' && s.id === 'pokhara')
+        || this.roadside.settlements.find((s) => s.kind === 'city');
+      const route = this.roads.routes.find((r) => r.id === 'prithvi') || this.roads.routes[0];
+      if (city && route) {
+        const pts = route.pts;
+        let bi = 0, bd = Infinity;
+        for (let i = 0; i < pts.length; i++) {
+          const d = (pts[i].x - city.x) ** 2 + (pts[i].z - city.z) ** 2;
+          if (d < bd) { bd = d; bi = i; }
+        }
+        // Walk ~7 nodes (≈800 m) out of town along the highway; make sure
+        // the spot is on the road, dry and clear of prop colliders.
+        for (let step = 7; step <= 11; step++) {
+          const i = bi + step < pts.length - 1 ? bi + step : bi - step;
+          if (i < 1) break;
+          const p = pts[i];
+          const toward = pts[i + (i > bi ? -1 : 1)];
+          if (this.water && this.water.submerged(p.x, p.z, this.generator.height(p.x, p.z))) continue;
+          this._spawn = {
+            x: p.x,
+            y: this.generator.height(p.x, p.z),
+            z: p.z,
+            yaw: Math.atan2(toward.x - p.x, toward.z - p.z), // face the city
+          };
+          return this._spawn;
+        }
+      }
+    }
     const gen = this.generator;
     const info = makeInfo();
     let best = null;
