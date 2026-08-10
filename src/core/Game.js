@@ -42,9 +42,34 @@ export class Game {
 
     // Phase W-3J: the Nepal fixed world IS the game. `?world=default`
     // keeps the original procedural world as a fallback/debug mode.
+    // W-3K render fix: if Nepal initialization ever fails on a device, fall
+    // back to the always-safe procedural world instead of a blank screen.
     const params = new URLSearchParams(location.search);
     const seed = Number(params.get('seed')) || 20;
-    this.world = new WorldManager(this.scene, seed, { nepal: params.get('world') !== 'default' });
+    const wantNepal = params.get('world') !== 'default';
+    try {
+      this.world = new WorldManager(this.scene, seed, { nepal: wantNepal });
+      if (wantNepal) {
+        const s = this.world.getSpawn();
+        if (![s.x, s.y, s.z, s.yaw].every(Number.isFinite)) {
+          throw new Error('nepal spawn invalid');
+        }
+      }
+    } catch (err) {
+      console.warn('Nepal world init failed - falling back to classic world:', err);
+      // Rebuild the scene cleanly for the fallback world.
+      this.scene = new THREE.Scene();
+      this.world = new WorldManager(this.scene, seed, { nepal: false });
+    }
+    // W-3K render fix: survive WebGL context loss (mobile backgrounding or
+    // rotation during load could leave a permanently blank canvas before).
+    canvas.addEventListener('webglcontextlost', (e) => e.preventDefault(), false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      location.reload(); // clean restart: every GPU resource re-created
+    }, false);
+    // Remove the static boot splash once the world exists.
+    const boot = document.getElementById('boot-splash');
+    if (boot) boot.remove();
     this.bike = new Bike(this.world);
     this.bikeModel = new BikeModel(this.scene);
     this.followCam = new FollowCamera(this.camera, this.world);

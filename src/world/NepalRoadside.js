@@ -331,13 +331,23 @@ export class NepalRoadside {
     // All dimensions in real metres (scale audit: base props were 1.5-2x
     // undersized; corrected via per-type scales — KTM towers ≈ 9x8 m
     // footprint and 18-22 m tall, shops ≈ 4.5-6 m fronts, streets 6.2 m).
+    // W-3K (realistic cities): per-city character. `coreR` = radius of the
+    // genuinely dense center; `dense` = overall development level; `towerP`
+    // = share of multi-storey blocks in the core (most of every city stays
+    // LOW-RISE, like real Nepal). Density falls off smoothly to countryside.
     const CITY_CFG = {
-      kathmandu: { towerS: 1.2, dense: 1.0, industrial: false, landmark: 'temple' },
-      pokhara: { towerS: 1.0, dense: 0.8, industrial: false, landmark: 'lakeside' },
-      bharatpur: { towerS: 0.9, dense: 0.75, industrial: true, landmark: 'market' },
-      butwal: { towerS: 1.0, dense: 0.8, industrial: true, landmark: 'stupa' },
-      biratnagar: { towerS: 0.9, dense: 0.8, industrial: 'heavy', landmark: 'stadium' },
-      nepalgunj: { towerS: 0.9, dense: 0.75, industrial: true, landmark: 'market' },
+      kathmandu: { towerS: 1.2, dense: 1.0, coreR: 340, towerP: 0.32, hiRise: 4,
+        industrial: false, landmark: 'temple' },
+      pokhara: { towerS: 1.0, dense: 0.62, coreR: 230, towerP: 0.10, hiRise: 2,
+        industrial: false, landmark: 'lakeside' },
+      bharatpur: { towerS: 0.9, dense: 0.55, coreR: 200, towerP: 0.12, hiRise: 1,
+        industrial: true, landmark: 'market' },
+      butwal: { towerS: 1.0, dense: 0.6, coreR: 220, towerP: 0.15, hiRise: 2,
+        industrial: true, landmark: 'stupa' },
+      biratnagar: { towerS: 0.9, dense: 0.6, coreR: 220, towerP: 0.14, hiRise: 2,
+        industrial: 'heavy', landmark: 'stadium' },
+      nepalgunj: { towerS: 0.9, dense: 0.55, coreR: 200, towerP: 0.12, hiRise: 1,
+        industrial: true, landmark: 'market' },
     };
     const buildCity = (route, iC, cityId, cfg) => {
       const pts = route.pts;
@@ -359,34 +369,61 @@ export class NepalRoadside {
         const px = -dz, pz = dx;
         const yawR = Math.atan2(dx, dz);
         const alongM = (i - iC) * 110;
-        const zone = Math.abs(alongM) < 340 ? 'core'
-          : Math.abs(alongM) < 560 ? 'commercial' : 'residential';
+        const zone = Math.abs(alongM) < cfg.coreR ? 'core'
+          : Math.abs(alongM) < cfg.coreR + 250 ? 'commercial' : 'residential';
 
-        // Main-street frontage.
+        // Main-street frontage: density gradient + building variety + open
+        // lots. A real Nepali city is mostly low-rise with green pockets —
+        // only the small core is dense, and even there gaps remain.
         for (const side of [-1, 1]) {
           const face = yawR + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
           const nPos = zone === 'core' ? 4 : 5; // 16 m blocks need ~27 m pitch
-          for (let row = 0; row < 2; row++) { // W-3K: two building rows deep
+          for (let row = 0; row < 2; row++) {
           for (let k = 0; k < nPos; k++) {
             const h = H(i * 41 + k * 7 + row * 13 + side + 1, p.x);
-            if (h > (zone === 'core' ? 0.92 : 0.78) * cfg.dense) continue;
+            const aAbs = Math.abs(alongM);
+            const dens = cfg.dense *
+              (aAbs < cfg.coreR ? 0.8
+                : aAbs < cfg.coreR + 250 ? 0.55
+                : Math.max(0.12, 0.45 - (aAbs - cfg.coreR - 250) / 1500)) *
+              (row ? 0.65 : 1);
             const along = (k + 0.5) / nPos;
             const core = zone === 'core';
             const rowOff = row * (core ? 21 : 18);
             const bx = p.x + dx * along * len + px * side * ((core ? 17 : 15) + rowOff + h * 3);
             const bz = p.z + dz * along * len + pz * side * ((core ? 17 : 15) + rowOff + h * 3);
+            if (h > dens) {
+              // Open lot: some become green pockets (trees), rest stay empty.
+              if (h < dens + 0.22 && spotOk(bx, bz, 0.6)) {
+                recFor(bx, bz, -22).items.push(it(h < dens + 0.1 ? 'tree' : 'sal',
+                  bx, bz, h * 6.28, 0.9 + h * 0.5, 0.5, 0.15));
+              }
+              continue;
+            }
+            // Building variety: mostly low-rise everywhere.
+            const t2 = h / dens; // 0..1 re-normalized pick
             if (core) {
-              const typ = h < 0.45 ? 'cityAN' : 'cityBN';
-              putB(typ, bx, bz, face, cfg.towerS * (0.93 + h * 0.18),
-                typ === 'cityAN' ? 8.5 : 6.8);
-            } else if (zone === 'commercial') {
-              const typ = h < 0.3 ? 'shopN' : h < 0.45 ? 'teashopN' : 'townhouseN';
-              putB(typ, bx, bz, face, 1, typ === 'shopN' ? 3.4 : typ === 'teashopN' ? 2.6 : 4.6);
-            } else {
-              const typ = h < 0.55 ? 'houseN' : 'townhouseN';
+              const typ = t2 < cfg.towerP ? (t2 < cfg.towerP * 0.5 ? 'cityAN' : 'cityBN')
+                : t2 < cfg.towerP + 0.42 ? 'townhouseN'
+                : t2 < cfg.towerP + 0.62 ? 'shopN' : 'houseN';
               putB(typ, bx, bz, face,
-                typ === 'houseN' ? houseVar(bx, bz) : thVar(bx, bz),
-                typ === 'houseN' ? 4.3 : 4.6);
+                typ === 'cityAN' || typ === 'cityBN' ? cfg.towerS * (0.93 + h * 0.18)
+                : typ === 'houseN' ? houseVar(bx, bz) : 1,
+                typ === 'cityAN' ? 8.5 : typ === 'cityBN' ? 6.8
+                : typ === 'shopN' ? 3.4 : typ === 'houseN' ? 4.3 : 4.6);
+            } else if (zone === 'commercial') {
+              const typ = t2 < 0.05 ? 'cityAN' : t2 < 0.4 ? 'townhouseN'
+                : t2 < 0.58 ? 'shopN' : t2 < 0.68 ? 'teashopN' : 'houseN';
+              putB(typ, bx, bz, face,
+                typ === 'cityAN' ? cfg.towerS * 0.85
+                : typ === 'houseN' ? houseVar(bx, bz) : 1,
+                typ === 'cityAN' ? 8.5 : typ === 'shopN' ? 3.4
+                : typ === 'teashopN' ? 2.6 : typ === 'houseN' ? 4.3 : 4.6);
+            } else {
+              const typ = t2 < 0.72 ? 'houseN' : t2 < 0.92 ? 'townhouseN' : 'teashopN';
+              putB(typ, bx, bz, face,
+                typ === 'houseN' ? houseVar(bx, bz) : typ === 'townhouseN' ? thVar(bx, bz) : 1,
+                typ === 'houseN' ? 4.3 : typ === 'townhouseN' ? 4.6 : 2.6);
             }
           }
           }
@@ -413,10 +450,20 @@ export class NepalRoadside {
               if (sg >= 2) {
                 for (const bs of [-1, 1]) {
                   const hh = H(i * 67 + sg * 11 + side * 3 + bs + 5, p.z);
-                  if (hh >= 0.68 * cfg.dense) continue;
+                  const dens2 = cfg.dense * (zone === 'core' ? 0.6 : 0.42);
+                  if (hh >= dens2) {
+                    if (hh < dens2 + 0.16) { // courtyard trees between plots
+                      const gx2 = sx2 + dx * 11 * bs, gz2 = sz2 + dz * 11 * bs;
+                      if (spotOk(gx2, gz2, 0.6)) recFor(gx2, gz2, -22).items.push(
+                        it('tree', gx2, gz2, hh * 6.28, 0.9 + hh * 0.4, 0.5, 0.15));
+                    }
+                    continue;
+                  }
                   const bx = sx2 + dx * 11 * bs, bz = sz2 + dz * 11 * bs;
-                  const typ = zone === 'core' ? (hh < 0.4 ? 'cityBN' : 'shopN')
-                    : hh < 0.5 ? 'houseN' : 'townhouseN';
+                  const t3 = hh / dens2;
+                  const typ = zone === 'core'
+                    ? (t3 < 0.18 ? 'cityBN' : t3 < 0.55 ? 'townhouseN' : 'shopN')
+                    : t3 < 0.65 ? 'houseN' : 'townhouseN';
                   putB(typ, bx, bz, yawR + (bs > 0 ? Math.PI : 0),
                     typ === 'cityBN' ? cfg.towerS * 0.85
                     : typ === 'houseN' ? houseVar(bx, bz) : 1,
@@ -444,6 +491,13 @@ export class NepalRoadside {
         const x = p.x + -dz * off, z = p.z + dx * off;
         return putB(typ, x, z, Math.atan2(dx, dz) + (off > 0 ? -Math.PI / 2 : Math.PI / 2), sc, collR);
       };
+      // Occasional landmark high-rises (most of the city stays low-rise).
+      for (let hr = 0; hr < (cfg.hiRise || 0); hr++) {
+        const along = (H(hr * 17 + 3, cC.x) - 0.5) * cfg.coreR * 1.6;
+        const off = (hr % 2 ? -1 : 1) * (24 + H(hr * 23 + 5, cC.z) * 10);
+        slot('cityBN', along, off, cfg.towerS * 1.28, 6.8 * 1.28);
+      }
+
       slot('schoolN', 260, 32, 1, 7.5) || slot('schoolN', -260, -32, 1, 7.5);
       slot('clinicN', -230, 28, 1, 4.6);
       slot('clinicN', 370, -28, 1, 4.6);
